@@ -21,8 +21,20 @@
 #include <string_view>
 #include <thread>
 
-class MangalibDownloaderError : public std::runtime_error
-{
+struct Chapter {
+  std::string chapterId;
+  int volumeNumber;
+  int chapterNumber;
+  bool selected;
+  Chapter(const std::string &id, const int &v, const int &n) {
+    chapterId = id;
+    volumeNumber = v;
+    chapterNumber = n;
+    selected = false;
+  }
+};
+
+class MangalibDownloaderError : public std::runtime_error {
 public:
   MangalibDownloaderError(std::string errorMessage)
       : std::runtime_error(errorMessage)
@@ -41,9 +53,16 @@ T TryGetValue(nlohmann::json data, const std::string& field)
   return data[field].get<T>();
 }
 
-class Downloader
-{
+class Downloader {
 private:
+  const std::string VOLUME = "chapter_volume";
+  const std::string CHAPTER_NUMBER = "chapter_number";
+  const std::string CHAPTER = "chapter";
+  const std::string CHAPTER_ID = "chapter_id";
+  const std::string SLUG = "slug";
+  const std::string IMAGES = "images";
+  const std::string DOWNLOAD_SERVER = "downloadServer";
+
   Uri uri;
   std::string jsonData;
   std::string mangaName;
@@ -58,6 +77,7 @@ private:
   nlohmann::json chaptersList;
   std::vector<Combiner*> combiners;
 
+  std::vector<Chapter> chapters;
   void ExtractJsonData()
   {
     auto res = cli.Get(uri.Path);
@@ -77,80 +97,16 @@ private:
 
   void ProcessCurrentChapter()
   {
-    const std::string VOLUME = "chapter_volume";
-    const std::string CHAPTER_NUMBER = "chapter_number";
-    const std::string CHAPTER = "chapter";
-    const std::string CHAPTER_ID = "chapter_id";
-    const std::string SLUG = "slug";
-    const std::string IMAGES = "images";
-    const std::string DOWNLOAD_SERVER = "downloadServer";
-
     int volumeNumber = TryGetValue<int>(currentChapter, VOLUME);
 
     int chapterNumber = std::stoi(TryGetValue<std::string>(currentChapter, CHAPTER_NUMBER));
 
     std::string chapterId = std::to_string(TryGetValue<int>(currentChapter, CHAPTER_ID));
 
-    DS_INFO("Getting info for volume {0} chapter {1}", volumeNumber, chapterNumber);
-    auto downloadData = cli.Get(std::format("/download/{0}", chapterId))->body;
-
-    DS_DEBUG("Extracting picture urls");
-    auto downloadDataJson = nlohmann::json::parse(downloadData);
-
-    std::string server = TryGetValue<std::string>(downloadDataJson, DOWNLOAD_SERVER);
-
-    DS_DEBUG("Download server : {0}", server);
-    httplib::Client pictureDownloader(server);
-
-    auto images = TryGetValue<nlohmann::json>(downloadDataJson, IMAGES);
-    auto chapterStruct = TryGetValue<nlohmann::json>(downloadDataJson, CHAPTER);
-    chapterId = TryGetValue<std::string>(chapterStruct, SLUG);
-    int attemptCount = 0;
-
-    for(auto& img: images) {
-      attemptCount = 0;
-
-      while(attemptCount <= 3) {
-        attemptCount++;
-
-        httplib::Result file = pictureDownloader.Get(std::format("{0}/manga{1}/chapters/{2}/{3}", server, uri.Path, chapterId, img.get<std::string>()));
-
-        if(file.error() != httplib::Error::Success) {
-          DS_ERROR("An error occured on request : {0}", httplib::to_string(file.error()));
-          std::this_thread::sleep_for(std::chrono::seconds(errorDelayS));
-          continue;
-        }
-        if(!file) {
-          DS_ERROR("Get return null");
-          std::this_thread::sleep_for(std::chrono::seconds(errorDelayS));
-          continue;
-        }
-        if(file->status != 200) {
-          DS_ERROR("Error {0} | BODY : {1}", file->status, file->body);
-          std::this_thread::sleep_for(std::chrono::seconds(errorDelayS));
-          continue;
-        }
-
-        for(auto combiner: combiners) {
-          combiner->AddFile(file->body);
-        }
-        break;
-      }
-      if(attemptCount >= 3) {
-        throw MangalibDownloaderError("Could not load after 3 attempts");
-      }
-    }
-
-    std::string outputPath = std::format("./{0}/vol_{1}_ch_{2}", mangaName, volumeNumber, chapterNumber);
-    std::string prevFile = std::format("vol_{0}_ch_{1}", volumeNumber, chapterNumber - 1);
-    std::string nextFile = std::format("vol_{0}_ch_{1}", volumeNumber, chapterNumber + 1);
-    for(auto combiner: combiners) {
-      combiner->SaveTo(outputPath, prevFile, nextFile);
-    }
+    chapters.emplace_back(Chapter(chapterId, volumeNumber, chapterNumber));
   }
 
-  void
-  ExtractChaptersList()
+  void ExtractChaptersList()
   {
     auto res = nlohmann::json::parse(jsonData);
 
@@ -192,11 +148,13 @@ public:
     cli.set_default_headers({{"Cookie", std::format("mangalib_session={0}", cookie)}});
   }
 
-  void Download()
+  std::vector<Chapter> GetChapters()
   {
+    // Getting info about amount of chapters and volumes
     DS_INFO("Extracting json data");
     ExtractJsonData();
 
+    // Parsing
     DS_INFO("Extracting chapters data");
     ExtractChaptersList();
 
@@ -207,8 +165,73 @@ public:
     for(auto it = chaptersList.rbegin(); it != chaptersList.rend(); ++it) {
       currentChapter = it.value();
       ProcessCurrentChapter();
-      std::this_thread::sleep_for(std::chrono::milliseconds(requestDelayMs));
+      //std::this_thread::sleep_for(std::chrono::milliseconds(requestDelayMs));
     }
+
+    return chapters;
+  }
+
+  bool DownloadChapter(Chapter chapter)
+  {
+    DS_INFO("Getting info for volume {0} chapter {1}", chapter.volumeNumber, chapter.chapterNumber);
+    auto downloadData = cli.Get(std::format("/download/{0}", chapter.chapterId))->body;
+
+    DS_DEBUG("Extracting picture urls");
+    auto downloadDataJson = nlohmann::json::parse(downloadData);
+
+    std::string server = TryGetValue<std::string>(downloadDataJson, DOWNLOAD_SERVER);
+    DS_DEBUG("Download server : {0}", server);
+    httplib::Client pictureDownloader(server);
+
+    auto images = TryGetValue<nlohmann::json>(downloadDataJson, IMAGES);
+    auto chapterStruct = TryGetValue<nlohmann::json>(downloadDataJson, CHAPTER);
+    std::string chapterId = TryGetValue<std::string>(chapterStruct, SLUG);
+    int attemptCount = 0;
+
+    for(auto& img: images) {
+      attemptCount = 0;
+
+      while(attemptCount <= 3) {
+        attemptCount++;
+
+        httplib::Result file = pictureDownloader.Get(std::format("{0}/manga{1}/chapters/{2}/{3}", server, uri.Path, chapterId, img.get<std::string>()));
+
+        if(file.error() != httplib::Error::Success) {
+          DS_ERROR("An error occured on request : {0}", httplib::to_string(file.error()));
+          std::this_thread::sleep_for(std::chrono::seconds(errorDelayS));
+          continue;
+        }
+        if(!file) {
+          DS_ERROR("Get return null");
+          std::this_thread::sleep_for(std::chrono::seconds(errorDelayS));
+          continue;
+        }
+        if(file->status != 200) {
+          DS_ERROR("Error {0} | BODY : {1}", file->status, file->body);
+          std::this_thread::sleep_for(std::chrono::seconds(errorDelayS));
+          continue;
+        }
+
+        for(auto combiner: combiners) {
+          combiner->AddFile(file->body);
+        }
+        break;
+      }
+      if(attemptCount >= 3) {
+        throw MangalibDownloaderError("Could not load after 3 attempts");
+      }
+    }
+
+    std::string outputPath = std::format("./{0}/vol_{1}_ch_{2}", mangaName, chapter.volumeNumber, chapter.chapterNumber);
+    std::string prevFile = std::format("vol_{0}_ch_{1}", chapter.volumeNumber, chapter.chapterNumber - 1);
+    std::string nextFile = std::format("vol_{0}_ch_{1}", chapter.volumeNumber, chapter.chapterNumber + 1);
+    for(auto combiner: combiners) {
+      combiner->SaveTo(outputPath, prevFile, nextFile);
+    }
+  }
+
+  bool DownloadAll()
+  {
   }
 };
 

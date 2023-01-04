@@ -4,10 +4,10 @@
 #include "imgui.h"
 #include <Daedalus.h>
 #include <EntryPoint.h>
+#include <memory>
 #include <thread>
 
-class TestWindow : public Daedalus::Win32Window
-{
+class TestWindow : public Daedalus::Win32Window {
 private:
   char link[512]{};
   char cookie[512]{};
@@ -16,6 +16,9 @@ private:
   int requestDealy = 0;
 
   std::vector<std::thread> threads;
+  std::vector<Chapter> chapters;
+
+  std::unique_ptr<Downloader> downloader;
 
 public:
   explicit TestWindow(Daedalus::WindowProps props)
@@ -25,20 +28,52 @@ public:
 
   void Render() override
   {
+    ImGui::PushItemWidth(300);
     ImGui::InputText("Link", link, 512);
     ImGui::InputText("Cookie", cookie, 512);
+
+    ImGui::PushItemWidth(128);
     ImGui::DragInt("Width", &width, 1.0f, 1, 100);
     ImGui::DragInt("Requests delay (ms)", &requestDealy, 1.0f, 0, 10000);
     ImGui::DragInt("Pause after an error (s)", &errorDelay, 1.0f, 0, 10000);
 
+    if(ImGui::Button("Get chapters")) {
+      auto l = Uri::Parse(link);
+      std::vector<Combiner*> combiners = {new HtmlCombiner(width)};
+      downloader = std::make_unique<Downloader>(l, cookie, combiners, requestDealy, errorDelay);
+      chapters = downloader->GetChapters();
+    }
+
+    ImGui::SameLine();
+
     if(ImGui::Button("Download")) {
       threads.emplace_back([this]() {
-        auto l = link;
-        auto c = cookie;
-        auto w = width;
-        Downloader downloader(Uri::Parse(l), c, {new HtmlCombiner(w)}, requestDealy, errorDelay);
-        downloader.Download();
+        for(auto& ch: chapters) {
+          if(ch.selected) {
+            downloader->DownloadChapter(ch);
+          }
+        }
       });
+    }
+
+    if(ImGui::Button("Select all")) {
+      for(auto& ch: chapters) {
+        ch.selected = true;
+      }
+    }
+
+    ImGui::SameLine();
+
+    if(ImGui::Button("Deselect all")) {
+      for(auto& ch: chapters) {
+        ch.selected = false;
+      }
+    }
+
+    for(auto& ch: chapters) {
+      if(ImGui::Selectable(std::format("Volume {0}, chapter {1}", ch.volumeNumber, ch.chapterNumber).c_str(), ch.selected)) {
+        ch.selected = !ch.selected;
+      }
     }
   }
   ~TestWindow()
@@ -51,16 +86,6 @@ public:
 
 Daedalus::Window* CreateGui()
 {
-  return new TestWindow({"Example window", Daedalus::WindowStyle::NoStyle, 1280, 800});
+  return new TestWindow({"Mangalib downloader", Daedalus::WindowStyle::NoStyle, 420, 240});
 }
 
-//int main()
-//{
-//  Logger::InitLogger();
-
-//  const std::string url = "https://mangalib.me/geomsulmyeong-ga-magnaeadeul?section=chapters&ui=382881";
-//  Downloader downloader(Uri::Parse(url), "eyJpdiI6Ii9JZXNlcnlUa0VmNlRSZ1lXNnRPL0E9PSIsInZhbHVlIjoiSUhOSUEzbHM2V0ZOVFdpYjUyVDhwazZKbm1iWTlNbEZ0bDJYNHl4MWpwbUhRYnB4OUhrQ1FiQlNtc1R0TFVmYnVCa0tmSUNNbTA4S3JKU2M3eUZnejVaNzhFZ1pzWG5oNW9jbnd0Y2h2SEIwcE0vbHpKUFUvRmZMOGpEdHY4ZnYiLCJtYWMiOiI4NTJhNmNjZmY1N2ZjMWRiZjViY2E5ZjUzNTNmMTg5MWU3YzFjNDI1M2JlN2UwYTIyMGExMmE3YzYzMDEzNDg0IiwidGFnIjoiIn0=",
-//                        {new HtmlCombiner});
-//
-// downloader.Download();
-//}

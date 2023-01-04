@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 
 project(MangalibDownloader)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 if(${CMAKE_HOST_SYSTEM_PROCESSOR} STREQUAL "AMD64")
 set(OPENSSL_PATH "${CMAKE_SOURCE_DIR}/openssl-3/x64")
@@ -18,8 +18,8 @@ add_compile_definitions(DAEDALUS_PLATFORM_WINDOWS)
 add_compile_definitions(DAEDALUS_STATIC_BUILD)
 
 # YOU CAN INSTALL DIRECTX SDK FROM URL :
-set(DXSDK_DIR "C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)")
-set(DAEDALUS_PATH ${PROJECT_SOURCE_DIR}/../Daedalus)
+set(DXSDK_DIR "C:/Program files (x86)/Microsoft DirectX SDK (June 2010)")
+set(DAEDALUS_PATH "W:/Daedalus")
 
 # SPDLOG
 set(SPDLOG_BUILD_WARNINGS 1)
