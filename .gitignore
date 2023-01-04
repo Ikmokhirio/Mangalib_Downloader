@@ -1,0 +1,5 @@
+Debug/
+Release/
+.cache
+compile_commands.json
+openssl-3/

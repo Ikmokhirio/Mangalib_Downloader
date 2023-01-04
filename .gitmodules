@@ -1,0 +1,12 @@
+[submodule "Modules/cppHttplib"]
+	path = Modules/cppHttplib
+	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "Modules/cppjson"]
+	path = Modules/cppjson
+	url = https://github.com/nlohmann/json.git
+[submodule "Modules/spdlog"]
+	path = Modules/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "Modules/cppBase64"]
+	path = Modules/cppBase64
+	url = https://github.com/SamuNatsu/Base64.git
