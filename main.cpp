@@ -11,7 +11,9 @@ class TestWindow : public Daedalus::Win32Window {
 private:
   char link[512]{};
   char cookie[512]{};
+
   int width = 100;
+  int repeatCount = 3;
   int errorDelay = 0;
   int requestDealy = 0;
 
@@ -20,10 +22,13 @@ private:
 
   std::unique_ptr<Downloader> downloader;
 
+  bool isCancelled;
+
 public:
   explicit TestWindow(Daedalus::WindowProps props)
       : Daedalus::Win32Window(std::move(props))
   {
+    isCancelled = false;
   }
 
   void Render() override
@@ -32,15 +37,30 @@ public:
     ImGui::InputText("Link", link, 512);
     ImGui::InputText("Cookie", cookie, 512);
 
-    ImGui::PushItemWidth(128);
-    ImGui::DragInt("Width", &width, 1.0f, 1, 100);
-    ImGui::DragInt("Requests delay (ms)", &requestDealy, 1.0f, 0, 10000);
-    ImGui::DragInt("Pause after an error (s)", &errorDelay, 1.0f, 0, 10000);
+    ImGui::BeginTable("Settings", 2);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Width [0-100%]", &width, 1.0f, 1, 100);
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Requests delay [ms]", &requestDealy, 1.0f, 0, 10000);
+
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Error pause [s]", &errorDelay, 1.0f, 0, 10000);
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Repeat count", &repeatCount, 1.0f, 1, 100);
+
+    ImGui::EndTable();
 
     if(ImGui::Button("Get chapters")) {
       auto l = Uri::Parse(link);
       std::vector<Combiner*> combiners = {new HtmlCombiner(width)};
-      downloader = std::make_unique<Downloader>(l, cookie, combiners, requestDealy, errorDelay);
+      downloader = std::make_unique<Downloader>(l, cookie, combiners, requestDealy, errorDelay, repeatCount);
       chapters = downloader->GetChapters();
     }
 
@@ -48,11 +68,26 @@ public:
 
     if(ImGui::Button("Download")) {
       threads.emplace_back([this]() {
+        int finished = 0;
+        int failed = 0;
         for(auto& ch: chapters) {
           if(ch.selected) {
-            downloader->DownloadChapter(ch);
+            if(isCancelled) {
+              return;
+            }
+            try {
+              downloader->DownloadChapter(ch);
+              ch.errorOnLastOperation = false;
+              ch.finished = true;
+              finished++;
+            } catch(MangalibDownloaderError& e) {
+              ch.errorOnLastOperation = true;
+              ch.finished = false;
+              failed++;
+            }
           }
         }
+        DS_INFO("Finished downloading. {0}/{1} SUCCESS. {2}/{1} FAILED", finished, chapters.size(), failed);
       });
     }
 
@@ -71,13 +106,24 @@ public:
     }
 
     for(auto& ch: chapters) {
-      if(ImGui::Selectable(std::format("Volume {0}, chapter {1}", ch.volumeNumber, ch.chapterNumber).c_str(), ch.selected)) {
+      std::string selectionText;
+      if(ch.finished) {
+        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[V]");
+      } else if(ch.errorOnLastOperation) {
+        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[X]");
+      } else {
+        selectionText = std::format("Volume {0}, chapter {1}", ch.volumeNumber, ch.chapterNumber);
+      }
+
+      if(ImGui::Selectable(selectionText.c_str(), ch.selected)) {
         ch.selected = !ch.selected;
       }
     }
   }
+
   ~TestWindow()
   {
+    isCancelled = true;
     for(auto& t: threads) {
       t.join();
     }

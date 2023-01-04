@@ -18,7 +18,7 @@ void HtmlCombiner::AddFile(const std::string& file, const std::string& name)
 
 void HtmlCombiner::SaveTo(const std::string& path, const std::string& prev, const std::string& next)
 {
-  DS_INFO("Saving html document as {0}.html", path);
+  DS_DEBUG("Saving html document as {0}.html", path);
   result.append(MID);
   result.append(std::format("<a href=\"{0}.html\">PREV</a>", prev));
   result.append(std::format("<a href=\"{0}.html\">NEXT</a>", next));
