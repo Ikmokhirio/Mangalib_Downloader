@@ -1,4 +1,5 @@
 #include "Downloader.h"
+#include "httplib.h"
 
 Downloader::Downloader(Uri url, std::string cookie, std::vector<Combiner*> combs, int requestDelay, int errorDelay, int maxAttemptCount)
     : uri(url)
@@ -107,24 +108,25 @@ void Downloader::ExtractChaptersList()
   const std::string LIST = "list";
 
   if(!res.contains(MANGA_BLOCK)) {
-    DS_ERROR("Cannot find \"manga\" block in data");
-    return;
+    throw MangalibDownloaderError("Cannot find \"manga\" block in data");
   }
+
   if(!res.contains(CHAPTERS)) {
-    DS_ERROR("Cannot find \"chapters\" block in data");
-    return;
+    throw MangalibDownloaderError("Cannot find \"chapters\" block in data");
   }
+
   if(!res[CHAPTERS].contains(LIST)) {
-    DS_ERROR("Cannot find \"list\" block in data");
-    return;
+    throw MangalibDownloaderError("Cannot find \"list\" block in data");
   }
+
   chaptersList = res[CHAPTERS][LIST];
 
   auto manga = res[MANGA_BLOCK];
+
   if(!manga.contains(ENG_NAME)) {
-    DS_ERROR("Cannot find english name for manga");
-    return;
+    throw MangalibDownloaderError("Cannot find english name for manga");
   }
+
   mangaName = manga[ENG_NAME];
 }
 
@@ -140,12 +142,23 @@ void Downloader::ProcessCurrentChapter()
 void Downloader::ExtractJsonData()
 {
   auto res = cli.Get(uri.Path);
+  if(res.error() != httplib::Error::Success) {
+    throw MangalibDownloaderError(std::format("An error occured on request : {0}", httplib::to_string(res.error())));
+  }
+
   const std::string MARKER_START = "window.__DATA__ = ";
   const std::string MARKER_END = "window._SITE_COLOR_";
 
   std::string body = res->body;
   int start = body.find(MARKER_START);
+  if(start == body.npos) {
+    throw MangalibDownloaderError("Cannot find data in response body");
+  }
+
   int end = body.find(MARKER_END);
+  if(end == body.npos) {
+    throw MangalibDownloaderError("Cannot find data in response body");
+  }
 
   jsonData = body.substr(start + MARKER_START.size(), end - (start + MARKER_END.size()));
   while(!jsonData.ends_with(';')) {

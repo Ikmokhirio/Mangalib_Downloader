@@ -1,5 +1,6 @@
 #include "Downloader.h"
 #include "HtmlCombiner.h"
+#include "MangalibAuthorizer.h"
 #include "UriParser.h"
 #include "imgui.h"
 #include <Daedalus.h>
@@ -10,7 +11,10 @@
 class TestWindow : public Daedalus::Win32Window {
 private:
   char link[512]{};
-  char cookie[512]{};
+  std::string cookie;
+  std::string errorMessage;
+  char login[512]{};
+  char password[512]{};
 
   int width = 100;
   int repeatCount = 3;
@@ -23,34 +27,52 @@ private:
   std::unique_ptr<Downloader> downloader;
 
   bool isCancelled;
+  bool isLogged;
+  bool isWorkFinished;
 
-public:
-  explicit TestWindow(Daedalus::WindowProps props)
-      : Daedalus::Win32Window(std::move(props))
+  MangalibAuthorizer auth;
+
+  void DisplayLoggingPage()
   {
-    isCancelled = false;
+    ImGui::InputText("Email", login, 512);
+    ImGui::InputText("Password", password, 512, ImGuiInputTextFlags_Password);
+    if(ImGui::Button("Login")) {
+      MangalibAuthorizer auth;
+      if(auth.Login(login, password)) {
+        cookie = auth.GetCookie();
+        isLogged = true;
+        errorMessage = "";
+      } else {
+        errorMessage = "Incorrect auth data";
+      }
+    }
+
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
   }
 
-  void Render() override
+  void DisplaySettings()
   {
     ImGui::PushItemWidth(300);
     ImGui::InputText("Link", link, 512);
-    ImGui::InputText("Cookie", cookie, 512);
 
     ImGui::BeginTable("Settings", 2);
 
     ImGui::TableNextRow();
+
     ImGui::TableNextColumn();
     ImGui::PushItemWidth(48);
     ImGui::DragInt("Width [0-100%]", &width, 1.0f, 1, 100);
+
     ImGui::TableNextColumn();
     ImGui::PushItemWidth(48);
     ImGui::DragInt("Requests delay [ms]", &requestDealy, 1.0f, 0, 10000);
 
     ImGui::TableNextRow();
+
     ImGui::TableNextColumn();
     ImGui::PushItemWidth(48);
     ImGui::DragInt("Error pause [s]", &errorDelay, 1.0f, 0, 10000);
+
     ImGui::TableNextColumn();
     ImGui::PushItemWidth(48);
     ImGui::DragInt("Repeat count", &repeatCount, 1.0f, 1, 100);
@@ -58,52 +80,87 @@ public:
     ImGui::EndTable();
 
     if(ImGui::Button("Get chapters")) {
-      auto l = Uri::Parse(link);
+      auto url = Uri::Parse(link);
       std::vector<Combiner*> combiners = {new HtmlCombiner(width)};
-      downloader = std::make_unique<Downloader>(l, cookie, combiners, requestDealy, errorDelay, repeatCount);
-      chapters = downloader->GetChapters();
+      downloader = std::make_unique<Downloader>(url, cookie, combiners, requestDealy, errorDelay, repeatCount);
+      try {
+        chapters = downloader->GetChapters();
+        errorMessage = "";
+      } catch(MangalibDownloaderError& e) {
+        errorMessage = "Cannot get chapters. ";
+        errorMessage.append(e.what());
+      }
     }
 
     ImGui::SameLine();
 
     if(ImGui::Button("Download")) {
-      threads.emplace_back([this]() {
-        int finished = 0;
-        int failed = 0;
-        for(auto& ch: chapters) {
-          if(ch.selected) {
-            if(isCancelled) {
-              return;
-            }
-            try {
-              downloader->DownloadChapter(ch);
-              ch.errorOnLastOperation = false;
-              ch.finished = true;
-              finished++;
-            } catch(MangalibDownloaderError& e) {
-              ch.errorOnLastOperation = true;
-              ch.finished = false;
-              failed++;
+      if(isWorkFinished) {
+        isWorkFinished = false;
+        threads.emplace_back([this]() {
+          int finished = 0;
+          int failed = 0;
+          int selected = 0;
+          for(auto& ch: chapters) {
+            if(ch.selected) {
+              selected++;
+              if(isCancelled) {
+                return;
+              }
+              try {
+                downloader->DownloadChapter(ch);
+                ch.errorOnLastOperation = false;
+                ch.finished = true;
+                finished++;
+              } catch(MangalibDownloaderError& e) {
+                ch.errorOnLastOperation = true;
+                ch.finished = false;
+                failed++;
+              }
             }
           }
+          DS_INFO("Finished downloading. {0}/{1} SUCCESS. {2}/{1} FAILED", finished, selected, failed);
+          isWorkFinished = true;
+        });
+      }
+    }
+  }
+
+public:
+  explicit TestWindow(Daedalus::WindowProps props)
+      : Daedalus::Win32Window(std::move(props))
+  {
+    isCancelled = false;
+    isLogged = false;
+    isWorkFinished = true;
+  }
+
+  void Render() override
+  {
+    if(!isLogged) {
+      DisplayLoggingPage();
+      return;
+    }
+
+    DisplaySettings();
+
+    if(chapters.size()) {
+      if(ImGui::Button("Select all")) {
+        for(auto& ch: chapters) {
+          ch.selected = true;
         }
-        DS_INFO("Finished downloading. {0}/{1} SUCCESS. {2}/{1} FAILED", finished, chapters.size(), failed);
-      });
-    }
+      }
 
-    if(ImGui::Button("Select all")) {
-      for(auto& ch: chapters) {
-        ch.selected = true;
+      ImGui::SameLine();
+
+      if(ImGui::Button("Deselect all")) {
+        for(auto& ch: chapters) {
+          ch.selected = false;
+        }
       }
     }
 
-    ImGui::SameLine();
-
-    if(ImGui::Button("Deselect all")) {
-      for(auto& ch: chapters) {
-        ch.selected = false;
-      }
-    }
+    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
 
     for(auto& ch: chapters) {
       std::string selectionText;

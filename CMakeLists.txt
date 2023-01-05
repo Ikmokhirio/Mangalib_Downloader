@@ -16,6 +16,7 @@ add_subdirectory("${PROJECT_SOURCE_DIR}/Modules/cppjson")
 
 add_compile_definitions(DAEDALUS_PLATFORM_WINDOWS)
 add_compile_definitions(DAEDALUS_STATIC_BUILD)
+add_compile_definitions(_WINSOCKAPI_)
 
 # YOU CAN INSTALL DIRECTX SDK FROM URL :
 set(DXSDK_DIR "C:/Program files (x86)/Microsoft DirectX SDK (June 2010)")
@@ -27,7 +28,7 @@ set(SPDLOG_NO_THREAD_ID ON)
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/Modules/spdlog")
 
-add_executable(${PROJECT_NAME} WIN32 main.cpp Downloader.h Downloader.cpp Combiner.h HtmlCombiner.h HtmlCombiner.cpp RawCombiner.h RawCombiner.cpp UriParser.h)
+add_executable(${PROJECT_NAME} WIN32 main.cpp MangalibAuthorizer.h MangalibAuthorizer.cpp Downloader.h Downloader.cpp Combiner.h HtmlCombiner.h HtmlCombiner.cpp RawCombiner.h RawCombiner.cpp UriParser.h)
 
 target_include_directories(${PROJECT_NAME} PUBLIC Modules/cppHttplib)
 target_include_directories(${PROJECT_NAME} PUBLIC "${OPENSSL_PATH}/include/")
@@ -41,4 +42,4 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${DAEDALUS_PATH}/ThirdParty/sp
 
 target_link_directories(${PROJECT_NAME} PUBLIC ${PROJECT_BINARY_DIR} ${DXSDK_DIR}/Lib/x64)
 
-target_link_libraries(${PROJECT_NAME} Daedalus imgui spdlogd d3d9 d3dx9 libssl nlohmann_json::nlohmann_json libcrypto)
+target_link_libraries(${PROJECT_NAME} Daedalus imgui spdlog d3d9 d3dx9 libssl nlohmann_json::nlohmann_json libcrypto)

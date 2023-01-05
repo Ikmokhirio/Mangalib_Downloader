@@ -6,8 +6,8 @@
 #include <chrono>
 #include <filesystem>
 #include <stdexcept>
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 
+#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "Combiner.h"
 #include "HtmlCombiner.h"
 #include "UriParser.h"
