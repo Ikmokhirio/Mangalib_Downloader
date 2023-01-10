@@ -7,16 +7,14 @@
 #include <string>
 #include <vector>
 
-class Combiner
-{
+class Combiner {
 private:
 public:
   Combiner() = default;
 
-  virtual void AddFile(const std::string& file, const std::string &name = "") = 0;
+  virtual void AddFile(const std::string& file, const std::wstring& name = L"") = 0;
 
-  virtual void SaveTo(const std::string& path, const std::string& prev, const std::string& next) = 0;
-
+  virtual void SaveTo(const std::wstring& path, const std::string& prev, const std::string& next) = 0;
 };
 
 #endif// MANGALIB_DOWNLOADER_COMBINER_H

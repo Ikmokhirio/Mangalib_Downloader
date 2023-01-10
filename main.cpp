@@ -1,11 +1,17 @@
+#include "Converter.h"
+#include "DarkTheme.h"
 #include "Downloader.h"
 #include "HtmlCombiner.h"
+#include "Logger.h"
 #include "MangalibAuthorizer.h"
+#include "RawCombiner.h"
+#include "Themes/ImGuiFont.h"
 #include "UriParser.h"
 #include "imgui.h"
 #include <Daedalus.h>
 #include <EntryPoint.h>
 #include <memory>
+#include <sstream>
 #include <thread>
 
 class TestWindow : public Daedalus::Win32Window {
@@ -16,6 +22,11 @@ private:
   char login[512]{};
   char password[512]{};
 
+  std::wstring rusName;
+  std::wstring origName;
+  std::wstring engName;
+  std::string currentName;
+
   int width = 100;
   int repeatCount = 3;
   int errorDelay = 0;
@@ -23,9 +34,11 @@ private:
 
   std::vector<std::thread> threads;
   std::vector<Chapter> chapters;
+  std::vector<ImFont*> fonts;
 
   std::unique_ptr<Downloader> downloader;
 
+  bool drawLogger;
   bool isCancelled;
   bool isLogged;
   bool isWorkFinished;
@@ -34,9 +47,20 @@ private:
 
   void DisplayLoggingPage()
   {
-    ImGui::InputText("Email", login, 512);
-    ImGui::InputText("Password", password, 512, ImGuiInputTextFlags_Password);
-    if(ImGui::Button("Login")) {
+    ImGui::PushFont(fonts[1]);
+    ImGui::SetCursorPosY(windowProps.height / 2.0f - ImGui::CalcTextSize("П").y * 3);
+    ImGui::Text("Логин : ");
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(windowProps.width - 496);
+    ImGui::InputText("##LOGIN", login, 496);
+
+    ImGui::Text("Пароль : ");
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(windowProps.width - 496);
+    ImGui::InputText("##PASSWORD", password, 496, ImGuiInputTextFlags_Password);
+
+    ImGui::SetCursorPosX(windowProps.width / 2.0f - 128);
+    if(ImGui::Button("Войти", ImVec2{256, 48})) {
       MangalibAuthorizer auth;
       if(auth.Login(login, password)) {
         cookie = auth.GetCookie();
@@ -46,14 +70,14 @@ private:
         errorMessage = "Incorrect auth data";
       }
     }
-
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
+    ImGui::PopFont();
   }
 
   void GetChapters()
   {
     auto url = Uri::Parse(link);
-    std::vector<Combiner*> combiners = {new HtmlCombiner(width)};
+    std::vector<Combiner*> combiners = {new HtmlCombiner(width), new RawCombiner()};
     downloader = std::make_unique<Downloader>(url, cookie, combiners, requestDealy, errorDelay, repeatCount);
     try {
       chapters = downloader->GetChapters();
@@ -61,6 +85,35 @@ private:
     } catch(MangalibDownloaderError& e) {
       errorMessage = "Cannot get chapters. ";
       errorMessage.append(e.what());
+    }
+
+    rusName = downloader->GetRussianName();
+    engName = downloader->GetEnglishName();
+    origName = downloader->GetOriginalName();
+  }
+
+  void SelectName()
+  {
+    if(!downloader) {
+      return;
+    }
+
+    ImGui::Text("Выберите название папки для сохранения : ");
+    if(!currentName.empty()) {
+      ImGui::Text("Текущее имя : %s", currentName.c_str());
+    }
+
+    if(!rusName.empty() && ImGui::Button(Converter::ToString(rusName).c_str())) {
+      downloader->SelectName(rusName);
+      currentName = Converter::ToString(rusName);
+    }
+    if(!engName.empty() && ImGui::Button(Converter::ToString(engName).c_str())) {
+      downloader->SelectName(engName);
+      currentName = Converter::ToString(engName);
+    }
+    if(!origName.empty() && ImGui::Button(Converter::ToString(origName).c_str())) {
+      downloader->SelectName(origName);
+      currentName = Converter::ToString(origName);
     }
   }
 
@@ -90,7 +143,7 @@ private:
             }
           }
         }
-        DS_INFO("Finished downloading. {0}/{1} SUCCESS. {2}/{1} FAILED", finished, selected, failed);
+        DS_INFO("Загрузка завершена. {0}/{1} УСПЕШНО. {2} С ОШИБКОЙ", finished, selected, failed);
         isWorkFinished = true;
       });
     }
@@ -99,47 +152,47 @@ private:
   void DisplaySettings()
   {
     ImGui::PushItemWidth(300);
-    ImGui::InputText("Link", link, 512);
-
-    ImGui::BeginTable("Settings", 2);
-
-    ImGui::TableNextRow();
-
-    ImGui::TableNextColumn();
-    ImGui::PushItemWidth(48);
-    ImGui::DragInt("Width [0-100%]", &width, 1.0f, 1, 100);
-
-    ImGui::TableNextColumn();
-    ImGui::PushItemWidth(48);
-    ImGui::DragInt("Requests delay [ms]", &requestDealy, 1.0f, 0, 10000);
-
-    ImGui::TableNextRow();
-
-    ImGui::TableNextColumn();
-    ImGui::PushItemWidth(48);
-    ImGui::DragInt("Error pause [s]", &errorDelay, 1.0f, 0, 10000);
-
-    ImGui::TableNextColumn();
-    ImGui::PushItemWidth(48);
-    ImGui::DragInt("Repeat count", &repeatCount, 1.0f, 1, 100);
-
-    ImGui::EndTable();
-
-    if(ImGui::Button("Get chapters")) {
-      GetChapters();
-    }
+    ImGui::InputText("Ссылка", link, 512);
 
     ImGui::SameLine();
 
-    if(ImGui::Button("Download")) {
-      DownloadChapters();
+    if(ImGui::Button("Получить список глав")) {
+      GetChapters();
     }
+
+    ImGui::BeginTable("Settings", 2, 0, ImVec2{(float) windowProps.width, 64});
+
+    ImGui::TableNextRow();
+
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Ширина страницы [0-100%]", &width, 1.0f, 1, 100);
+
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Задержка между запросами [мс]", &requestDealy, 1.0f, 0, 10000);
+
+    ImGui::TableNextRow();
+
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Пауза после ошибки [с]", &errorDelay, 1.0f, 0, 10000);
+
+    ImGui::TableNextColumn();
+    ImGui::PushItemWidth(48);
+    ImGui::DragInt("Количество повторений после ошибок", &repeatCount, 1.0f, 1, 100);
+
+    ImGui::EndTable();
+
+    SelectName();
+
+    ImGui::Separator();
   }
 
   void DisplaySelection()
   {
     if(chapters.size()) {
-      if(ImGui::Button("Select all")) {
+      if(ImGui::Button("Выбрать все")) {
         for(auto& ch: chapters) {
           ch.selected = true;
         }
@@ -147,24 +200,31 @@ private:
 
       ImGui::SameLine();
 
-      if(ImGui::Button("Deselect all")) {
+      if(ImGui::Button("Убрать все")) {
         for(auto& ch: chapters) {
           ch.selected = false;
         }
+      }
+
+      ImGui::SameLine();
+
+      if(ImGui::Button("Скачать")) {
+        DownloadChapters();
       }
     }
   }
 
   void DisplayDownloadStatus()
   {
+
     for(auto& ch: chapters) {
       std::string selectionText;
       if(ch.finished) {
-        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[V]");
+        selectionText = std::format("Том {0}, глава {1} {2}", ch.volumeNumber, ch.chapterNumber, "[Успешно]");
       } else if(ch.errorOnLastOperation) {
-        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[X]");
+        selectionText = std::format("Том {0}, глава {1} {2}", ch.volumeNumber, ch.chapterNumber, "[Ошибка]");
       } else {
-        selectionText = std::format("Volume {0}, chapter {1}", ch.volumeNumber, ch.chapterNumber);
+        selectionText = std::format("Том {0}, глава {1}", ch.volumeNumber, ch.chapterNumber);
       }
 
       if(ImGui::Selectable(selectionText.c_str(), ch.selected)) {
@@ -177,9 +237,15 @@ public:
   explicit TestWindow(Daedalus::WindowProps props)
       : Daedalus::Win32Window(std::move(props))
   {
+
+    drawLogger = false;
     isCancelled = false;
     isLogged = false;
     isWorkFinished = true;
+
+    Daedalus::ImGuiFont font(R"(Fonts\Inter-Bold.ttf)", 14, Daedalus::Russian | Daedalus::English);
+    Daedalus::ImGuiFont bigFont(R"(Fonts\Inter-Bold.ttf)", 32, Daedalus::Russian | Daedalus::English);
+    fonts = SetNextTheme(new DarkTheme({font}, {bigFont}));
   }
 
   void Render() override
@@ -189,7 +255,25 @@ public:
       return;
     }
 
+    if(ImGui::Button("Включить логи")) {
+      drawLogger = true;
+    }
+
+    ImGui::SameLine();
+
+    if(ImGui::Button("Выключить логи")) {
+      drawLogger = false;
+    }
+
+    if(drawLogger) {
+
+      Daedalus::ImGuiLogger::Draw();
+      return;
+    }
+
     DisplaySettings();
+
+    ImGui::Text("Список глав");
 
     DisplaySelection();
 
@@ -204,11 +288,12 @@ public:
     for(auto& t: threads) {
       t.join();
     }
+    Daedalus::ImGuiLogger::DestroyLogger();
   };
 };
 
 Daedalus::Window* CreateGui()
 {
-  return new TestWindow({"Mangalib downloader", Daedalus::WindowStyle::NoStyle, 420, 240});
+  return new TestWindow({"Mangalib downloader", Daedalus::WindowStyle::NoStyle, 640, 496});
 }
 

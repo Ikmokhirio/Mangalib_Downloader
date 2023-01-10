@@ -14,6 +14,8 @@ endif()
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 add_subdirectory("${PROJECT_SOURCE_DIR}/Modules/cppjson")
 
+add_compile_definitions(NO_SPD_LOGGER)
+add_compile_definitions(IMGUI_APP_LOGGER)
 add_compile_definitions(DAEDALUS_PLATFORM_WINDOWS)
 add_compile_definitions(DAEDALUS_STATIC_BUILD)
 add_compile_definitions(_WINSOCKAPI_)
@@ -28,7 +30,7 @@ set(SPDLOG_NO_THREAD_ID ON)
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/Modules/spdlog")
 
-add_executable(${PROJECT_NAME} WIN32 main.cpp MangalibAuthorizer.h MangalibAuthorizer.cpp Downloader.h Downloader.cpp Combiner.h HtmlCombiner.h HtmlCombiner.cpp RawCombiner.h RawCombiner.cpp UriParser.h)
+add_executable(${PROJECT_NAME} WIN32 main.cpp MangalibAuthorizer.h MangalibAuthorizer.cpp Downloader.h Downloader.cpp Combiner.h HtmlCombiner.h HtmlCombiner.cpp RawCombiner.h RawCombiner.cpp UriParser.h Converter.h Converter.cpp DarkTheme.h DarkTheme.cpp)
 
 target_include_directories(${PROJECT_NAME} PUBLIC Modules/cppHttplib)
 target_include_directories(${PROJECT_NAME} PUBLIC "${OPENSSL_PATH}/include/")

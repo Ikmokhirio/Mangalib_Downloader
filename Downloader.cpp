@@ -1,5 +1,17 @@
 #include "Downloader.h"
+#include "Converter.h"
 #include "httplib.h"
+#include <sstream>
+
+void CreateDirectoryWithChecking(const wchar_t* i_LPCWSTR_FolderPath)
+{
+  ::WIN32_FIND_DATAW data;
+  ::HANDLE handle = ::FindFirstFileW(i_LPCWSTR_FolderPath, &data);
+  if(handle == INVALID_HANDLE_VALUE)
+    ::CreateDirectoryW(i_LPCWSTR_FolderPath, NULL);
+  else
+    FindClose(handle);
+}
 
 Downloader::Downloader(Uri url, std::string cookie, std::vector<Combiner*> combs, int requestDelay, int errorDelay, int maxAttemptCount)
     : uri(url)
@@ -14,6 +26,8 @@ Downloader::Downloader(Uri url, std::string cookie, std::vector<Combiner*> combs
 
 void Downloader::DownloadChapter(Chapter chapter)
 {
+  CreateDirectoryWithChecking(mangaName.c_str());
+
   DS_DEBUG("Getting info for volume {0} chapter {1}", chapter.volumeNumber, chapter.chapterNumber);
   auto downloadData = cli.Get(std::format("/download/{0}", chapter.chapterId))->body;
 
@@ -56,8 +70,10 @@ void Downloader::DownloadChapter(Chapter chapter)
         continue;
       }
 
+      std::wostringstream ss;
+      ss << "./" << mangaName << "/" << Converter::ToWString(img.get<std::string>());
       for(auto combiner: combiners) {
-        combiner->AddFile(file->body);
+        combiner->AddFile(file->body, ss.str());
       }
       break;
     }
@@ -66,14 +82,17 @@ void Downloader::DownloadChapter(Chapter chapter)
     }
   }
 
-  std::string outputPath = std::format("./{0}/vol_{1}_ch_{2}", mangaName, chapter.volumeNumber, chapter.chapterNumber);
+  std::wostringstream ss;
+  std::wstring outputPath;
+  ss << "./" << mangaName << "/vol_" << chapter.volumeNumber << "_ch_" << chapter.chapterNumber;
+  //std::string outputPath = std::format("./{0}/vol_{1}_ch_{2}", mangaName, chapter.volumeNumber, chapter.chapterNumber);
   std::string previousChapter = std::format("vol_{0}_ch_{1}", chapter.volumeNumber, chapter.chapterNumber - 1);
   std::string nextChapter = std::format("vol_{0}_ch_{1}", chapter.volumeNumber, chapter.chapterNumber + 1);
 
   for(auto combiner: combiners) {
-    combiner->SaveTo(outputPath, previousChapter, nextChapter);
+    combiner->SaveTo(ss.str(), previousChapter, nextChapter);
   }
-  DS_INFO("Finished {0} vol{1}. ch{2}", mangaName, chapter.volumeNumber, chapter.chapterNumber);
+  DS_INFO("Finished vol{0}. ch{1}", chapter.volumeNumber, chapter.chapterNumber);
 }
 
 std::vector<Chapter> Downloader::GetChapters()
@@ -86,9 +105,8 @@ std::vector<Chapter> Downloader::GetChapters()
   DS_DEBUG("Extracting chapters data");
   ExtractChaptersList();
 
-  DS_DEBUG("Manga name is \"{0}\"", mangaName);
-  DS_DEBUG("Creating folder...");
-  std::filesystem::create_directory(mangaName);
+  // Figure wstring
+  //DS_DEBUG("Manga name is \"{0}\"", mangaName);
 
   for(auto it = chaptersList.rbegin(); it != chaptersList.rend(); ++it) {
     currentChapter = it.value();
@@ -103,7 +121,6 @@ void Downloader::ExtractChaptersList()
   auto res = nlohmann::json::parse(jsonData);
 
   const std::string MANGA_BLOCK = "manga";
-  const std::string ENG_NAME = "engName";
   const std::string CHAPTERS = "chapters";
   const std::string LIST = "list";
 
@@ -127,7 +144,11 @@ void Downloader::ExtractChaptersList()
     throw MangalibDownloaderError("Cannot find english name for manga");
   }
 
-  mangaName = manga[ENG_NAME];
+  mangaName = Converter::ToWString(manga[ENG_NAME]);
+
+  originalName = Converter::ToWString(manga[ORIG_NAME]);
+  englishName = Converter::ToWString(manga[ENG_NAME]);
+  russianName = Converter::ToWString(manga[RUS_NAME]);
 }
 
 void Downloader::ProcessCurrentChapter()

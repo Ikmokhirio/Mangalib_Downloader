@@ -46,7 +46,7 @@ public:
   MangalibDownloaderError(std::string errorMessage)
       : std::runtime_error(errorMessage)
   {
-    DS_ERROR(errorMessage);
+    DS_ERROR(errorMessage.c_str());
   }
 };
 
@@ -62,6 +62,10 @@ T TryGetValue(nlohmann::json data, const std::string& field)
 
 class Downloader {
 private:
+  const std::string ENG_NAME = "engName";
+  const std::string RUS_NAME = "rusName";
+  const std::string ORIG_NAME = "name";
+
   const std::string VOLUME = "chapter_volume";
   const std::string CHAPTER_NUMBER = "chapter_number";
   const std::string CHAPTER = "chapter";
@@ -73,7 +77,10 @@ private:
 
   Uri uri;
   std::string jsonData;
-  std::string mangaName;
+  std::wstring mangaName;
+  std::wstring originalName;
+  std::wstring russianName;
+  std::wstring englishName;
 
   int maxAttempt;
   int errorSleepTime;
@@ -99,6 +106,14 @@ public:
   std::vector<Chapter> GetChapters();
 
   void DownloadChapter(Chapter chapter);
+
+  inline void SelectName(std::wstring name) { mangaName = name; }
+
+  inline std::wstring GetRussianName() { return russianName; }
+
+  inline std::wstring GetEnglishName() { return englishName; }
+
+  inline std::wstring GetOriginalName() { return originalName; }
 };
 
 #endif// MANGALIB_DOWNLOADER_DOWNLOADER_H

@@ -8,8 +8,7 @@
 #include <string>
 #include <vector>
 
-class HtmlCombiner : public Combiner
-{
+class HtmlCombiner : public Combiner {
 private:
   std::string original;
   const std::string START_STYLE = R"(
@@ -54,9 +53,9 @@ private:
 public:
   HtmlCombiner(int width);
 
-  void AddFile(const std::string& file, const std::string& name = "") override;
+  void AddFile(const std::string& file, const std::wstring& name = L"") override;
 
-  void SaveTo(const std::string& path, const std::string& prev, const std::string& next) override;
+  void SaveTo(const std::wstring& path, const std::string& prev, const std::string& next) override;
 };
 
 #endif// MANGALIB_DOWNLOADER_HTMLCOMBINER_H
