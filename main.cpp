@@ -50,6 +50,52 @@ private:
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
   }
 
+  void GetChapters()
+  {
+    auto url = Uri::Parse(link);
+    std::vector<Combiner*> combiners = {new HtmlCombiner(width)};
+    downloader = std::make_unique<Downloader>(url, cookie, combiners, requestDealy, errorDelay, repeatCount);
+    try {
+      chapters = downloader->GetChapters();
+      errorMessage = "";
+    } catch(MangalibDownloaderError& e) {
+      errorMessage = "Cannot get chapters. ";
+      errorMessage.append(e.what());
+    }
+  }
+
+  void DownloadChapters()
+  {
+    if(isWorkFinished) {
+      isWorkFinished = false;
+      threads.emplace_back([this]() {
+        int finished = 0;
+        int failed = 0;
+        int selected = 0;
+        for(auto& ch: chapters) {
+          if(ch.selected) {
+            selected++;
+            if(isCancelled) {
+              return;
+            }
+            try {
+              downloader->DownloadChapter(ch);
+              ch.errorOnLastOperation = false;
+              ch.finished = true;
+              finished++;
+            } catch(MangalibDownloaderError& e) {
+              ch.errorOnLastOperation = true;
+              ch.finished = false;
+              failed++;
+            }
+          }
+        }
+        DS_INFO("Finished downloading. {0}/{1} SUCCESS. {2}/{1} FAILED", finished, selected, failed);
+        isWorkFinished = true;
+      });
+    }
+  }
+
   void DisplaySettings()
   {
     ImGui::PushItemWidth(300);
@@ -80,48 +126,49 @@ private:
     ImGui::EndTable();
 
     if(ImGui::Button("Get chapters")) {
-      auto url = Uri::Parse(link);
-      std::vector<Combiner*> combiners = {new HtmlCombiner(width)};
-      downloader = std::make_unique<Downloader>(url, cookie, combiners, requestDealy, errorDelay, repeatCount);
-      try {
-        chapters = downloader->GetChapters();
-        errorMessage = "";
-      } catch(MangalibDownloaderError& e) {
-        errorMessage = "Cannot get chapters. ";
-        errorMessage.append(e.what());
-      }
+      GetChapters();
     }
 
     ImGui::SameLine();
 
     if(ImGui::Button("Download")) {
-      if(isWorkFinished) {
-        isWorkFinished = false;
-        threads.emplace_back([this]() {
-          int finished = 0;
-          int failed = 0;
-          int selected = 0;
-          for(auto& ch: chapters) {
-            if(ch.selected) {
-              selected++;
-              if(isCancelled) {
-                return;
-              }
-              try {
-                downloader->DownloadChapter(ch);
-                ch.errorOnLastOperation = false;
-                ch.finished = true;
-                finished++;
-              } catch(MangalibDownloaderError& e) {
-                ch.errorOnLastOperation = true;
-                ch.finished = false;
-                failed++;
-              }
-            }
-          }
-          DS_INFO("Finished downloading. {0}/{1} SUCCESS. {2}/{1} FAILED", finished, selected, failed);
-          isWorkFinished = true;
-        });
+      DownloadChapters();
+    }
+  }
+
+  void DisplaySelection()
+  {
+    if(chapters.size()) {
+      if(ImGui::Button("Select all")) {
+        for(auto& ch: chapters) {
+          ch.selected = true;
+        }
+      }
+
+      ImGui::SameLine();
+
+      if(ImGui::Button("Deselect all")) {
+        for(auto& ch: chapters) {
+          ch.selected = false;
+        }
+      }
+    }
+  }
+
+  void DisplayDownloadStatus()
+  {
+    for(auto& ch: chapters) {
+      std::string selectionText;
+      if(ch.finished) {
+        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[V]");
+      } else if(ch.errorOnLastOperation) {
+        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[X]");
+      } else {
+        selectionText = std::format("Volume {0}, chapter {1}", ch.volumeNumber, ch.chapterNumber);
+      }
+
+      if(ImGui::Selectable(selectionText.c_str(), ch.selected)) {
+        ch.selected = !ch.selected;
       }
     }
   }
@@ -144,38 +191,11 @@ public:
 
     DisplaySettings();
 
-    if(chapters.size()) {
-      if(ImGui::Button("Select all")) {
-        for(auto& ch: chapters) {
-          ch.selected = true;
-        }
-      }
-
-      ImGui::SameLine();
-
-      if(ImGui::Button("Deselect all")) {
-        for(auto& ch: chapters) {
-          ch.selected = false;
-        }
-      }
-    }
+    DisplaySelection();
 
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
 
-    for(auto& ch: chapters) {
-      std::string selectionText;
-      if(ch.finished) {
-        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[V]");
-      } else if(ch.errorOnLastOperation) {
-        selectionText = std::format("Volume {0}, chapter {1} {2}", ch.volumeNumber, ch.chapterNumber, "[X]");
-      } else {
-        selectionText = std::format("Volume {0}, chapter {1}", ch.volumeNumber, ch.chapterNumber);
-      }
-
-      if(ImGui::Selectable(selectionText.c_str(), ch.selected)) {
-        ch.selected = !ch.selected;
-      }
-    }
+    DisplayDownloadStatus();
   }
 
   ~TestWindow()
