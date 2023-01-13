@@ -25,19 +25,33 @@ struct Chapter {
   std::string chapterId;
   int volumeNumber;
   int chapterNumber;
+  int branchNumber;
 
   bool selected;
   bool finished;
   bool errorOnLastOperation;
 
-  Chapter(const std::string& id, const int& v, const int& n)
+  Chapter(const std::string& id, const int& v, const int& n, const int branch = 0)
   {
     chapterId = id;
     volumeNumber = v;
     chapterNumber = n;
+    branchNumber = branch;
+
     selected = false;
     errorOnLastOperation = false;
     finished = false;
+  }
+};
+
+struct Team {
+  std::string name;
+  int branch;
+
+  Team(const std::string& teamName, const int& branchNumber)
+  {
+    branch = branchNumber;
+    name = teamName;
   }
 };
 
@@ -74,6 +88,7 @@ private:
   const std::string IMAGES = "images";
   const std::string DOWNLOAD_SERVER = "downloadServer";
   const std::string MANGALIB_URL = "https://mangalib.me";
+  const std::string BRANCH_ID = "branch_id";
 
   Uri uri;
   std::string jsonData;
@@ -81,6 +96,8 @@ private:
   std::wstring originalName;
   std::wstring russianName;
   std::wstring englishName;
+
+  int branchId;
 
   int maxAttempt;
   int errorSleepTime;
@@ -90,11 +107,10 @@ private:
 
   nlohmann::json currentChapter;
   nlohmann::json chaptersList;
+  nlohmann::json branchesList;
 
   std::vector<Chapter> chapters;
   std::vector<Combiner*> combiners;
-
-  void ExtractJsonData();
 
   void ProcessCurrentChapter();
 
@@ -103,9 +119,19 @@ private:
 public:
   Downloader(Uri url, std::string cookie, std::vector<Combiner*> combs, int requestDelay = 0, int errorDelay = 0, int maxAttemptCount = 3);
 
+  std::vector<Team> GetTeams();
+
   std::vector<Chapter> GetChapters();
 
   void DownloadChapter(Chapter chapter);
+
+  void ExtractJsonData();
+
+  inline void SelectBranch(const int& branch)
+  {
+    DS_INFO("Выбор ветки {0}", branch);
+    branchId = branch;
+  }
 
   inline void SelectName(std::wstring name) { mangaName = name; }
 

@@ -34,6 +34,7 @@ private:
 
   std::vector<std::thread> threads;
   std::vector<Chapter> chapters;
+  std::vector<Team> teams;
   std::vector<ImFont*> fonts;
 
   std::unique_ptr<Downloader> downloader;
@@ -74,11 +75,26 @@ private:
     ImGui::PopFont();
   }
 
-  void GetChapters()
+  void GetTranslations()
   {
     auto url = Uri::Parse(link);
     std::vector<Combiner*> combiners = {new HtmlCombiner(width), new RawCombiner()};
     downloader = std::make_unique<Downloader>(url, cookie, combiners, requestDealy, errorDelay, repeatCount);
+
+    try {
+      downloader->ExtractJsonData();
+      teams = downloader->GetTeams();
+    } catch(const MangalibDownloaderError& e) {
+      errorMessage = e.what();
+    }
+  }
+
+  void GetChapters()
+  {
+    if(!downloader) {
+      return;
+    }
+
     try {
       chapters = downloader->GetChapters();
       errorMessage = "";
@@ -156,8 +172,8 @@ private:
 
     ImGui::SameLine();
 
-    if(ImGui::Button("Получить список глав")) {
-      GetChapters();
+    if(ImGui::Button("Получить список переводов")) {
+      GetTranslations();
     }
 
     ImGui::BeginTable("Settings", 2, 0, ImVec2{(float) windowProps.width, 64});
@@ -233,6 +249,27 @@ private:
     }
   }
 
+  void DisplayTranslations()
+  {
+    if(!downloader) {
+      return;
+    }
+
+    if(teams.empty()) {
+      ImGui::Text("Произведение не содержит альтернативных переводо");
+      if(ImGui::Button("Выгрузить главы")) {
+        GetChapters();
+      }
+      return;
+    }
+    for(auto& team: teams) {
+      if(ImGui::Button(team.name.c_str())) {
+        downloader->SelectBranch(team.branch);
+        GetChapters();
+      }
+    }
+  }
+
 public:
   explicit TestWindow(Daedalus::WindowProps props)
       : Daedalus::Win32Window(std::move(props))
@@ -272,6 +309,8 @@ public:
     }
 
     DisplaySettings();
+
+    DisplayTranslations();
 
     ImGui::Text("Список глав");
 

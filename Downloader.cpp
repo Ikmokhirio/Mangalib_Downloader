@@ -3,18 +3,45 @@
 #include "httplib.h"
 #include <sstream>
 
+std::string GetLastErrorAsString()
+{
+  //Get the error message ID, if any.
+  DWORD errorMessageID = ::GetLastError();
+  if(errorMessageID == 0) {
+    return std::string();//No error message has been recorded
+  }
+
+  LPWSTR messageBuffer = nullptr;
+
+  size_t size = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                               NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPWSTR) &messageBuffer, 0, NULL);
+
+  //Copy the error message into a std::string.
+  std::wstring message(messageBuffer, size);
+
+  //Free the Win32's string's buffer.
+  LocalFree(messageBuffer);
+
+  return Converter::ToString(message);
+}
+
 void CreateDirectoryWithChecking(const wchar_t* i_LPCWSTR_FolderPath)
 {
   ::WIN32_FIND_DATAW data;
   ::HANDLE handle = ::FindFirstFileW(i_LPCWSTR_FolderPath, &data);
-  if(handle == INVALID_HANDLE_VALUE)
-    ::CreateDirectoryW(i_LPCWSTR_FolderPath, NULL);
-  else
+  if(handle == INVALID_HANDLE_VALUE) {
+    auto result = ::CreateDirectoryW(i_LPCWSTR_FolderPath, NULL);
+    if(result == 0) {
+      DS_INFO("Ошибка код {0} : {1}", GetLastError(), GetLastErrorAsString());
+    }
+  } else {
     FindClose(handle);
+  }
 }
 
 Downloader::Downloader(Uri url, std::string cookie, std::vector<Combiner*> combs, int requestDelay, int errorDelay, int maxAttemptCount)
     : uri(url)
+    , branchId(0)
     , maxAttempt(maxAttemptCount)
     , errorSleepTime(errorDelay)
     , requestDelayMs(requestDelay)
@@ -97,9 +124,10 @@ void Downloader::DownloadChapter(Chapter chapter)
 
 std::vector<Chapter> Downloader::GetChapters()
 {
-  // Getting info about amount of chapters and volumes
-  DS_DEBUG("Extracting json data");
-  ExtractJsonData();
+  chapters = std::vector<Chapter>();
+  if(jsonData.empty()) {
+    throw MangalibDownloaderError("No json data [call ExtractJsonData() first]");
+  }
 
   // Parsing
   DS_DEBUG("Extracting chapters data");
@@ -116,12 +144,54 @@ std::vector<Chapter> Downloader::GetChapters()
   return chapters;
 }
 
+std::vector<Team> Downloader::GetTeams()
+{
+  if(jsonData.empty()) {
+    throw MangalibDownloaderError("No json data [call ExtractJsonData() first]");
+  }
+
+  std::vector<Team> teams;
+
+  auto res = nlohmann::json::parse(jsonData);
+
+  const std::string MANGA_BLOCK = "manga";
+  const std::string CHAPTERS = "chapters";
+  const std::string BRANCHES = "branches";
+  const std::string TEAMS = "teams";
+  const std::string NAME = "name";
+
+  if(!res.contains(MANGA_BLOCK)) {
+    throw MangalibDownloaderError("Cannot find \"manga\" block in data");
+  }
+
+  if(!res.contains(CHAPTERS)) {
+    throw MangalibDownloaderError("Cannot find \"chapters\" block in data");
+  }
+
+  if(!res[CHAPTERS].contains(BRANCHES)) {
+    throw MangalibDownloaderError("Cannot find \"branches\" block in data");
+  }
+
+  branchesList = res[CHAPTERS][BRANCHES];
+
+  for(auto& branch: branchesList) {
+    std::stringstream ss;
+    for(auto& team: branch[TEAMS]) {
+      ss << team[NAME] << " ";
+    }
+    teams.push_back(Team(ss.str(), branch["id"]));
+  }
+
+  return teams;
+}
+
 void Downloader::ExtractChaptersList()
 {
   auto res = nlohmann::json::parse(jsonData);
 
   const std::string MANGA_BLOCK = "manga";
   const std::string CHAPTERS = "chapters";
+  const std::string BRANCHES = "branches";
   const std::string LIST = "list";
 
   if(!res.contains(MANGA_BLOCK)) {
@@ -156,19 +226,33 @@ void Downloader::ProcessCurrentChapter()
   int volumeNumber = TryGetValue<int>(currentChapter, VOLUME);
   int chapterNumber = std::stoi(TryGetValue<std::string>(currentChapter, CHAPTER_NUMBER));
   std::string chapterId = std::to_string(TryGetValue<int>(currentChapter, CHAPTER_ID));
+  if(branchId != 0) {
+    try {
+      int currentBranch = TryGetValue<int>(currentChapter, BRANCH_ID);
+      if(currentBranch != branchId) {
+        return;
+      }
+    } catch(MangalibDownloaderError& e) {
+      DS_INFO(e.what());
+      return;
+    }
+  }
 
-  chapters.emplace_back(Chapter(chapterId, volumeNumber, chapterNumber));
+  chapters.emplace_back(Chapter(chapterId, volumeNumber, chapterNumber, branchId));
 }
 
 void Downloader::ExtractJsonData()
 {
+  // Getting info about amount of chapters and volumes
+  DS_DEBUG("Extracting json data");
+
   auto res = cli.Get(uri.Path);
   if(res.error() != httplib::Error::Success) {
     throw MangalibDownloaderError(std::format("An error occured on request : {0}", httplib::to_string(res.error())));
   }
 
   const std::string MARKER_START = "window.__DATA__ = ";
-  const std::string MARKER_END = "window._SITE_COLOR_";
+  const std::string MARKER_END = "window._SITE_COLOR_"; // TODO : Script tag works better
 
   std::string body = res->body;
   int start = body.find(MARKER_START);
