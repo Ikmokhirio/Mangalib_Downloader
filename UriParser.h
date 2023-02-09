@@ -6,7 +6,7 @@
 
 struct Uri {
 public:
-  std::string QueryString, Path, Protocol, Host, Port;
+  std::string QueryString, Path, Protocol, Host, Port, ProtocolHost;
 
   static Uri Parse(const std::string& uri)
   {
@@ -61,6 +61,10 @@ public:
     // query
     if(queryStart != uriEnd)
       result.QueryString = std::string(queryStart, uri.end());
+
+    result.ProtocolHost = result.Protocol;
+    result.ProtocolHost.append("://");
+    result.ProtocolHost.append(result.Host);
 
     return result;
 

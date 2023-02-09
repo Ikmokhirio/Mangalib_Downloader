@@ -1,4 +1,3 @@
-#include "Converter.h"
 #include "DarkTheme.h"
 #include "Downloader.h"
 #include "HtmlCombiner.h"
@@ -10,6 +9,7 @@
 #include "imgui.h"
 #include <Daedalus.h>
 #include <EntryPoint.h>
+#include <Utils/Utils.h>
 #include <memory>
 #include <sstream>
 #include <thread>
@@ -44,6 +44,9 @@ private:
   bool isLogged;
   bool isWorkFinished;
 
+  bool htmlDownload;
+  bool picturesDownload;
+
   MangalibAuthorizer auth;
 
   void DisplayLoggingPage()
@@ -53,12 +56,12 @@ private:
     ImGui::Text("Логин : ");
     ImGui::SameLine();
     ImGui::SetCursorPosX(windowProps.width - 496);
-    ImGui::InputText("##LOGIN", login, 496);
+    ImGui::InputText("##LOGIN", login, 512);
 
     ImGui::Text("Пароль : ");
     ImGui::SameLine();
     ImGui::SetCursorPosX(windowProps.width - 496);
-    ImGui::InputText("##PASSWORD", password, 496, ImGuiInputTextFlags_Password);
+    ImGui::InputText("##PASSWORD", password, 512, ImGuiInputTextFlags_Password);
 
     ImGui::SetCursorPosX(windowProps.width / 2.0f - 128);
     if(ImGui::Button("Войти", ImVec2{256, 48})) {
@@ -68,7 +71,7 @@ private:
         isLogged = true;
         errorMessage = "";
       } else {
-        errorMessage = "Incorrect auth data";
+        errorMessage = "Некорректные данные";
       }
     }
     ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
@@ -78,7 +81,22 @@ private:
   void GetTranslations()
   {
     auto url = Uri::Parse(link);
-    std::vector<Combiner*> combiners = {new HtmlCombiner(width), new RawCombiner()};
+    std::vector<Combiner*> combiners;
+
+    if(htmlDownload) {
+      combiners.emplace_back(new HtmlCombiner(width));
+    }
+    if(picturesDownload) {
+      combiners.emplace_back(new RawCombiner());
+    }
+
+    if(combiners.empty()) {
+      errorMessage = "Выберите один или несколько вариантов для загрузки";
+      return;
+    } else {
+      errorMessage = "";
+    }
+
     downloader = std::make_unique<Downloader>(url, cookie, combiners, requestDealy, errorDelay, repeatCount);
 
     try {
@@ -99,7 +117,7 @@ private:
       chapters = downloader->GetChapters();
       errorMessage = "";
     } catch(MangalibDownloaderError& e) {
-      errorMessage = "Cannot get chapters. ";
+      errorMessage = "Главы не загружены. ";
       errorMessage.append(e.what());
     }
 
@@ -110,7 +128,7 @@ private:
 
   void SelectName()
   {
-    if(!downloader) {
+    if(!downloader || chapters.empty()) {
       return;
     }
 
@@ -170,7 +188,13 @@ private:
     ImGui::PushItemWidth(300);
     ImGui::InputText("Ссылка", link, 512);
 
-    ImGui::SameLine();
+    if(ImGui::Selectable("Скачать как html", htmlDownload)) {
+      htmlDownload = !htmlDownload;
+    }
+
+    if(ImGui::Selectable("Скачать как картинки", picturesDownload)) {
+      picturesDownload = !picturesDownload;
+    }
 
     if(ImGui::Button("Получить список переводов")) {
       GetTranslations();
@@ -207,26 +231,26 @@ private:
 
   void DisplaySelection()
   {
-    if(chapters.size()) {
-      if(ImGui::Button("Выбрать все")) {
-        for(auto& ch: chapters) {
-          ch.selected = true;
-        }
+    if(chapters.empty()) { return; }
+
+    if(ImGui::Button("Выбрать все")) {
+      for(auto& ch: chapters) {
+        ch.selected = true;
       }
+    }
 
-      ImGui::SameLine();
+    ImGui::SameLine();
 
-      if(ImGui::Button("Убрать все")) {
-        for(auto& ch: chapters) {
-          ch.selected = false;
-        }
+    if(ImGui::Button("Убрать все")) {
+      for(auto& ch: chapters) {
+        ch.selected = false;
       }
+    }
 
-      ImGui::SameLine();
+    ImGui::SameLine();
 
-      if(ImGui::Button("Скачать")) {
-        DownloadChapters();
-      }
+    if(ImGui::Button("Скачать")) {
+      DownloadChapters();
     }
   }
 
@@ -262,6 +286,8 @@ private:
       }
       return;
     }
+
+    ImGui::Text("Выберите перевод");
     for(auto& team: teams) {
       if(ImGui::Button(team.name.c_str())) {
         downloader->SelectBranch(team.branch);
@@ -279,6 +305,9 @@ public:
     isCancelled = false;
     isLogged = false;
     isWorkFinished = true;
+
+    htmlDownload = false;
+    picturesDownload = false;
 
     Daedalus::ImGuiFont font(R"(Fonts\Inter-Bold.ttf)", 14, Daedalus::Russian | Daedalus::English);
     Daedalus::ImGuiFont bigFont(R"(Fonts\Inter-Bold.ttf)", 32, Daedalus::Russian | Daedalus::English);
@@ -303,14 +332,13 @@ public:
     }
 
     if(drawLogger) {
-
       Daedalus::ImGuiLogger::Draw();
       return;
     }
 
-    DisplaySettings();
-
     DisplayTranslations();
+
+    DisplaySettings();
 
     ImGui::Text("Список глав");
 
@@ -333,6 +361,6 @@ public:
 
 Daedalus::Window* CreateGui()
 {
-  return new TestWindow({"Mangalib downloader", Daedalus::WindowStyle::NoStyle, 640, 496});
+  return new TestWindow({"Мангалиб загрузчик", Daedalus::WindowStyle::NoStyle, 640, 496});
 }
 

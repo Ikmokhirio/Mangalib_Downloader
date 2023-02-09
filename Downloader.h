@@ -87,7 +87,6 @@ private:
   const std::string SLUG = "slug";
   const std::string IMAGES = "images";
   const std::string DOWNLOAD_SERVER = "downloadServer";
-  const std::string MANGALIB_URL = "https://mangalib.me";
   const std::string BRANCH_ID = "branch_id";
 
   Uri uri;
@@ -127,11 +126,7 @@ public:
 
   void ExtractJsonData();
 
-  inline void SelectBranch(const int& branch)
-  {
-    DS_INFO("Выбор ветки {0}", branch);
-    branchId = branch;
-  }
+  inline void SelectBranch(const int& branch) { branchId = branch; }
 
   inline void SelectName(std::wstring name) { mangaName = name; }
 
