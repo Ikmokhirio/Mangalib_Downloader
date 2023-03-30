@@ -89,7 +89,6 @@ private:
     if(picturesDownload) {
       combiners.emplace_back(new RawCombiner());
     }
-
     if(combiners.empty()) {
       errorMessage = "Выберите один или несколько вариантов для загрузки";
       return;
@@ -155,7 +154,7 @@ private:
   {
     if(isWorkFinished) {
       isWorkFinished = false;
-      threads.emplace_back([this]() {
+      threads.emplace_back([this]() { 
         int finished = 0;
         int failed = 0;
         int selected = 0;
@@ -361,6 +360,6 @@ public:
 
 Daedalus::Window* CreateGui()
 {
-  return new TestWindow({"Мангалиб загрузчик", Daedalus::WindowStyle::NoStyle, 640, 496});
+  return new TestWindow({"Мангалиб загрузчик", Daedalus::WindowStyle::NoStyle, 640, 480});
 }
 
