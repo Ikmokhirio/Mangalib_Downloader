@@ -27,13 +27,13 @@ std::string GetToken(std::string body)
 
   int start = body.find(MARKER_START);
   if(start == body.npos) {
-    throw std::runtime_error("Login error");
+    throw std::runtime_error("Ошибка логина");
   }
   start += 3;
 
   int end = body.find(MARKER_END);
   if(end == body.npos) {
-    throw std::runtime_error("Login error");
+    throw std::runtime_error("Ошибка логина");
   }
 
   std::string jsonData = body.substr(start + MARKER_START.size(), end - (start + MARKER_END.size()));

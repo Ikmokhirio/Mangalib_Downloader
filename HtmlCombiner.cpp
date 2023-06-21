@@ -1,6 +1,7 @@
 #include "HtmlCombiner.h"
-#include <Utils/Utils.h>
+#include "Downloader.h"
 #include <Daedalus.h>
+#include <Utils/Utils.h>
 #include <format>
 #include <sstream>
 
@@ -30,6 +31,9 @@ void HtmlCombiner::SaveTo(const std::wstring& path, const std::string& prev, con
   ss << path << ".html";
   std::wofstream out;
   out.open(ss.str());
+  if(!out) {
+    throw MangalibDownloaderError(std::format("{0} Ошибка : {1}", Converter::ToString(ss.str()), GetLastErrorAsString()));
+  }
   out << Converter::ToWString(result);
   out.close();
 

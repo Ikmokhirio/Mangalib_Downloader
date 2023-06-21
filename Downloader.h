@@ -21,6 +21,8 @@
 #include <string_view>
 #include <thread>
 
+#include "MangaSearcher.h"
+
 struct Chapter {
   std::string chapterId;
   int volumeNumber;
@@ -29,6 +31,7 @@ struct Chapter {
 
   bool selected;
   bool finished;
+  bool loading;
   bool errorOnLastOperation;
 
   Chapter(const std::string& id, const int& v, const int& n, const int branch = 0)
@@ -41,6 +44,7 @@ struct Chapter {
     selected = false;
     errorOnLastOperation = false;
     finished = false;
+    loading = false;
   }
 };
 
@@ -91,10 +95,6 @@ private:
 
   Uri uri;
   std::string jsonData;
-  std::wstring mangaName;
-  std::wstring originalName;
-  std::wstring russianName;
-  std::wstring englishName;
 
   int branchId;
 
@@ -115,8 +115,10 @@ private:
 
   void ExtractChaptersList();
 
+  Manga currentManga;
+
 public:
-  Downloader(Uri url, std::string cookie, std::vector<Combiner*> combs, int requestDelay = 0, int errorDelay = 0, int maxAttemptCount = 3);
+  Downloader(Uri url, std::string cookie, int requestDelay = 0, int errorDelay = 0, int maxAttemptCount = 3);
 
   std::vector<Team> GetTeams();
 
@@ -128,13 +130,11 @@ public:
 
   inline void SelectBranch(const int& branch) { branchId = branch; }
 
-  inline void SelectName(std::wstring name) { mangaName = name; }
+  inline void SelectName(std::string name) { currentManga.mangaName = name; }
 
-  inline std::wstring GetRussianName() { return russianName; }
+  inline Manga GetCurrentManga() { return currentManga; }
 
-  inline std::wstring GetEnglishName() { return englishName; }
-
-  inline std::wstring GetOriginalName() { return originalName; }
+  inline void SetCombiners(std::vector<Combiner*> combs) { combiners = combs; }
 };
 
 #endif// MANGALIB_DOWNLOADER_DOWNLOADER_H

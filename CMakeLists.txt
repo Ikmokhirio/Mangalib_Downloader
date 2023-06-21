@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(MangalibDownloader)
+project(MangalibDownloader VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -16,21 +16,23 @@ string(TOLOWER ${CMAKE_BUILD_TYPE} build_type)
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 add_subdirectory("${PROJECT_SOURCE_DIR}/Modules/cppjson")
 
-#add_compile_definitions(NO_SPD_LOGGER)
-#add_compile_definitions(IMGUI_APP_LOGGER)
+if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    message("Building resources")
+    enable_language("RC")
+    set (WIN32_RESOURCES ${PROJECT_BINARY_DIR}/windows/downloader.rc ${PROJECT_BINARY_DIR}/windows/Resource.h)
+endif()
+
 add_compile_definitions(DAEDALUS_PLATFORM_WINDOWS)
 add_compile_definitions(DAEDALUS_STATIC_BUILD)
 add_compile_definitions(_WINSOCKAPI_)
 
 # YOU CAN INSTALL DIRECTX SDK FROM URL :
 set(DXSDK_DIR "C:/Program files (x86)/Microsoft DirectX SDK (June 2010)")
-set(DAEDALUS_PATH "C:/Users/dryav/CLionProjects/Daedalus")
+set(DAEDALUS_PATH "W:/Daedalus")
 
-# SPDLOG
-set(SPDLOG_BUILD_WARNINGS 1)
-set(SPDLOG_NO_THREAD_ID ON)
+add_executable(${PROJECT_NAME} WIN32 Gui.cpp MangalibAuthorizer.h MangalibAuthorizer.cpp Downloader.h Downloader.cpp Combiner.h HtmlCombiner.h HtmlCombiner.cpp RawCombiner.h RawCombiner.cpp UriParser.h DarkTheme.h DarkTheme.cpp MangaSearcher.cpp)
 
-add_executable(${PROJECT_NAME} WIN32 main.cpp MangalibAuthorizer.h MangalibAuthorizer.cpp Downloader.h Downloader.cpp Combiner.h HtmlCombiner.h HtmlCombiner.cpp RawCombiner.h RawCombiner.cpp UriParser.h DarkTheme.h DarkTheme.cpp)
+target_sources(${PROJECT_NAME} PRIVATE ${WIN32_RESOURCES})
 
 target_include_directories(${PROJECT_NAME} PUBLIC Modules/cppHttplib)
 target_include_directories(${PROJECT_NAME} PUBLIC "${PROJECT_SOURCE_DIR}/Modules/cppjson/single_include")
@@ -59,5 +61,7 @@ message("Debug build")
 target_link_libraries(${PROJECT_NAME} Daedalus imgui spdlogd d3d9 d3dx9 libssl nlohmann_json::nlohmann_json libcrypto)
 elseif (build_type STREQUAL release)
 message("Release build")
+add_compile_definitions(DISABLE_CORE_LOGGER)
+add_compile_definitions(IMGUI_APP_LOGGER)
 target_link_libraries(${PROJECT_NAME} Daedalus imgui spdlog d3d9 d3dx9 libssl nlohmann_json::nlohmann_json libcrypto)
 endif()
