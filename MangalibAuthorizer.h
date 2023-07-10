@@ -2,6 +2,7 @@
 #define MANGALIB_DOWNLOADER_MANGALIBAUTHORIZER_H
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
+#include "Error.h"
 #include <httplib.h>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -18,12 +19,13 @@ private:
   httplib::Client libSocialCli;
 
   std::string authCookie;
+
 public:
   MangalibAuthorizer();
 
   bool Login(std::string username, std::string password);
 
-  std::string GetCookie();
+  std::string Cookie();
 };
 
 #endif// MANGALIB_DOWNLOADER_MANGALIBAUTHORIZER_H

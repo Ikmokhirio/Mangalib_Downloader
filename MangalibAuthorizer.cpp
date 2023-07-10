@@ -16,7 +16,7 @@ std::string GetCookie(std::string header, std::string name)
   int start = header.find(marker);
   int end = header.find(";");
 
-  return header.substr(start + marker.size(), end - start);
+  return header.substr(start + marker.size(), end - start - marker.size());
 }
 
 std::string GetToken(std::string body)
@@ -52,11 +52,19 @@ bool MangalibAuthorizer::Login(std::string username, std::string password)
 {
   auto res = libSocialCli.Get("/login");// ?from=https://mangalib.me/?section=home-updates
 
+  if(!res) {
+    throw MangalibDownloaderError("Нет интернет соединения");
+  }
+
+  if(res->status != 200) {
+    throw MangalibDownloaderError(std::format("Сервер вернул {0} на запрос аутентификации", res->status));
+  }
+
   auto cookieHeader = res->get_header_value(SET_COOKIE);
-  std::string xsrfToken = ::GetCookie(cookieHeader, "XSRF-TOKEN");
+  std::string xsrfToken = GetCookie(cookieHeader, "XSRF-TOKEN");
 
   cookieHeader = res->get_header_value(SET_COOKIE, 1);
-  std::string mangalibSession = ::GetCookie(cookieHeader, "mangalib_session");
+  std::string mangalibSession = GetCookie(cookieHeader, "mangalib_session");
 
   libSocialCli.set_default_headers({{"Cookie", std::format("mangalib_session={0}; XSRF-TOKEN={1}", mangalibSession, xsrfToken)}});
 
@@ -70,12 +78,12 @@ bool MangalibAuthorizer::Login(std::string username, std::string password)
       {"remember", "on"}};
   res = libSocialCli.Post("/login", params);
 
-  authCookie = ::GetCookie(res->get_header_value(SET_COOKIE, 1), "mangalib_session");
+  authCookie = GetCookie(res->get_header_value(SET_COOKIE, 1), "mangalib_session");
 
   return res->body.find(INCORRECT_LOGIN_FLAG) == res->body.npos;
 }
 
-std::string MangalibAuthorizer::GetCookie()
+std::string MangalibAuthorizer::Cookie()
 {
   return authCookie;
 }

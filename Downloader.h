@@ -5,7 +5,8 @@
 #include "nlohmann/json_fwd.hpp"
 #include <chrono>
 #include <filesystem>
-#include <stdexcept>
+
+#include "Error.h"
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "Combiner.h"
@@ -59,15 +60,6 @@ struct Team {
   }
 };
 
-class MangalibDownloaderError : public std::runtime_error {
-public:
-  MangalibDownloaderError(std::string errorMessage)
-      : std::runtime_error(errorMessage)
-  {
-    DS_ERROR(errorMessage.c_str());
-  }
-};
-
 template<typename T>
 T TryGetValue(nlohmann::json data, const std::string& field)
 {
@@ -92,6 +84,7 @@ private:
   const std::string IMAGES = "images";
   const std::string DOWNLOAD_SERVER = "downloadServer";
   const std::string BRANCH_ID = "branch_id";
+  const std::string SET_COOKIE = "set-cookie";
 
   Uri uri;
   std::string jsonData;
@@ -103,6 +96,10 @@ private:
   int requestDelayMs;
 
   httplib::Client cli;
+
+  std::string xsrfToken;
+  std::string cookie;
+  std::string antiDDOSToken;
 
   nlohmann::json currentChapter;
   nlohmann::json chaptersList;
@@ -135,6 +132,12 @@ public:
   inline Manga GetCurrentManga() { return currentManga; }
 
   inline void SetCombiners(std::vector<Combiner*> combs) { combiners = combs; }
+
+  inline void SetMaxAttempts(int attempts) { maxAttempt = attempts; }
+
+  inline void SetErrorDelay(int seconds) { errorSleepTime = seconds; }
+
+  inline void SetRequestDelay(int milliseconds) { requestDelayMs = milliseconds; }
 };
 
 #endif// MANGALIB_DOWNLOADER_DOWNLOADER_H

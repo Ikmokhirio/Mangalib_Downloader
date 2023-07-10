@@ -4,20 +4,23 @@
 #include <format>
 #include <stdint.h>
 #include <string>
+#include <thread>
 
 MangaSearcher::MangaSearcher(Uri uri, std::string cookie)
     : cli(uri.ProtocolHost)
-    , thumbCli("https://cover.imglib.info")
+    , thumbCli(uri.ProtocolHost)
+    // , thumbCli("https://cover.imglib.info")
 {
-  cli.set_default_headers({{"Cookie", std::format("mangalib_session={0}", cookie)}});
+  cli.set_default_headers({{"Cookie", std::format("mangalib_session={0}", cookie)}, {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}});
   cli.set_connection_timeout(std::chrono::seconds(2));
   cli.set_read_timeout(std::chrono::seconds(2));
   cli.set_write_timeout(std::chrono::seconds(2));
 
-  thumbCli.set_default_headers({{"Cookie", std::format("mangalib_session={0}", cookie)}});
+  thumbCli.set_default_headers({{"Cookie", std::format("mangalib_session={0}", cookie)}, {"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"}, {"Connection", "keep-alive"}});
   thumbCli.set_connection_timeout(std::chrono::seconds(2));
   thumbCli.set_read_timeout(std::chrono::seconds(2));
   thumbCli.set_write_timeout(std::chrono::seconds(2));
+  thumbCli.set_follow_location(true);// Redirect anti-dos
 }
 
 void MangaSearcher::FindManga(const std::string& name, bool hiRes)
@@ -48,13 +51,13 @@ void MangaSearcher::FindManga(const std::string& name, bool hiRes)
     manga.back().thumbnail = TryGetValue<std::string>(data, "coverImageThumbnail");
 
     manga.back().link = TryGetValue<std::string>(data, "href");
+    // DS_INFO("{0}", Uri::Parse(manga.back().thumbnail).Path);
 
     // Download thumbnail
-    //
     if(hiRes) {
-      res = thumbCli.Get(manga.back().cover);
+      res = thumbCli.Get(Uri::Parse(manga.back().cover).Path);
     } else {
-      res = thumbCli.Get(manga.back().thumbnail);
+      res = thumbCli.Get(Uri::Parse(manga.back().thumbnail).Path);
     }
 
     if(res.error() != httplib::Error::Success) {
@@ -64,8 +67,11 @@ void MangaSearcher::FindManga(const std::string& name, bool hiRes)
     if(manga.back().thumbnail.empty()) {
       return;
     }
-
-    manga.back().thumbnailBinary = res->body;
+    if(res->body.find("DOCTYPE") != std::string::npos) {
+      manga.back().thumbnailBinary = std::string();
+    } else {
+      manga.back().thumbnailBinary = res->body;
+    }
 
     manga.back().selected = false;
     manga.back().empty = false;

@@ -39,6 +39,10 @@ DownloaderWindow::DownloaderWindow(Daedalus::WindowPropsWin32 props)
   Daedalus::ImGuiFont medium(source_sansFont, 18, Daedalus::All);
   Daedalus::ImGuiFont bigFont(source_sansFont, 32, Daedalus::All);
   fonts = SetNextTheme(new DarkTheme({font}, {medium, bigFont}));
+
+  requestDelay = 0;
+  errorDelay = 60;
+  repeatCount = 5;
 }
 
 DownloaderWindow::~DownloaderWindow()
@@ -67,14 +71,23 @@ void DownloaderWindow::DrawMangaCard(Manga& manga, bool isClickable)
   const float summaryPosX = 160;// Позиция текста с описанием
   const float scrollSizeX = 64;
   const float imagaeOffsetX = 16;
-  float rel = (float) manga.img->width / manga.img->height;
+  float rel = 0.0f;
+  if(manga.img) {
+    rel = (float) manga.img->width / manga.img->height;
+  }
 
   ImGui::PushFont(fonts[1]);
   auto headerSize = ImGui::CalcTextSize(manga.russianName.c_str());
   ImGui::PopFont();
 
-  float textHeight = ImGui::CalcTextSize(summary.c_str(), NULL, false, windowProps.width - summaryPosX - scrollSizeX - imagaeOffsetX).y + headerSize.y * 2;
-  float height = width / rel + headerSize.y * 2;
+  float textHeight = ImGui::CalcTextSize(summary.c_str(), NULL, false, windowProps.width - summaryPosX - scrollSizeX - imagaeOffsetX).y + headerSize.y * 3;
+
+  float height = width;
+  if(manga.img) {
+    height = width / rel + headerSize.y * 3;
+  } else {
+    height = textHeight;
+  }
 
   if(manga.selected) {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.92f, 0.18f, 0.29f, 1.00f));
@@ -87,7 +100,11 @@ void DownloaderWindow::DrawMangaCard(Manga& manga, bool isClickable)
   ImGui::PopFont();
 
   ImGui::SetCursorPosX(imagaeOffsetX);
-  ImGui::DisplayImage(manga.img, {width, width / rel});
+  if(manga.img) {
+    ImGui::DisplayImage(manga.img, {width, width / rel});
+  } else {
+    ImGui::Button("EMPTY", {width, width});
+  }
 
   ImGui::SameLine(summaryPosX);
   ImGui::PushTextWrapPos(windowProps.width - scrollSizeX);
@@ -157,7 +174,7 @@ void DownloaderWindow::DisplaySearch()
 
   ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
   for(auto& manga: searcher->List()) {
-    if(!manga.img) {
+    if(!manga.img && !manga.thumbnailBinary.empty()) {
       manga.img = LoadImageFromMemory(GetDevicePointer(), manga.thumbnailBinary.data(), manga.thumbnailBinary.size(), 0, 0);
     }
     DrawMangaCard(manga);
@@ -225,14 +242,18 @@ void DownloaderWindow::DisplayLoggingPage()
 
   ImGui::SetCursorPosX(windowProps.width / 2.0f - 128);
   if(ImGui::Button("Войти", ImVec2{256, 48})) {
-    MangalibAuthorizer auth;
-    if(auth.Login(login, password)) {
-      cookie = auth.GetCookie();
-      searcher = std::make_unique<MangaSearcher>(Uri::Parse("https://mangalib.me"), cookie);
-      state = Search;
-      errorMessage = "";
-    } else {
-      errorMessage = "Некорректные данные";
+    try {
+      MangalibAuthorizer auth;
+      if(auth.Login(login, password)) {
+        cookie = auth.Cookie();
+        searcher = std::make_unique<MangaSearcher>(Uri::Parse("https://mangalib.me"), cookie);
+        state = Search;
+        errorMessage = "";
+      } else {
+        errorMessage = "Некорректные данные";
+      }
+    } catch(std::exception& e) {
+      errorMessage = e.what();
     }
   }
   ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", errorMessage.c_str());
@@ -443,6 +464,9 @@ void DownloaderWindow::DisplayTranslationList()
   if(teams.empty()) {
     ImGui::Text("Произведение не содержит альтернативных переводов");
     if(ImGui::Button("Выгрузить главы")) {
+      downloader->SetErrorDelay(errorDelay);
+      downloader->SetMaxAttempts(repeatCount);
+      downloader->SetRequestDelay(requestDelay);
       GetChapters();
     }
     return;
@@ -461,14 +485,29 @@ void DownloaderWindow::DisplayDownload()
 {
   DisplayDownloadSettings();
 
+  ImGui::Text("Как выбрать настройки?");
+  ImGui::Text(R"(Основная проблема при скачивании - сервер перестает отвечать
+Независимо от ошибки эта проблема решается с помощью паузы между запросами
+Есть два варианта:
+1) Скачиваешь главы, которые скачиваются и игнорируешь те, 
+   которые не скачались, а потом докачиваешь остальные
+2) Скачиваешь главы по порядку и ждёшь, пока сервер начнет отвечать
+
+В первом случае достаточно поставить 3 попытки и "паузу после ошибки" - 1 или 2 секунды
+
+Во втором случае я предлагаю поставить 5 попыток и "паузу после ошибки" - 60 секунд, то есть минуту. 
+Тогда время скачивания будет долгим, но больше вероятность, что все главы скачаются за один запуск
+Для второго случая предназначены настройки по-умолчанию)");
+
+  ImGui::Separator();
+
   DisplayTranslationList();
 
   SelectFolder();
 
-  ImGui::Text("Список глав (выберите нужные и нажмите скачать)");
-
   if(!chapters.empty()) {
 
+    ImGui::Text("Список глав (выберите нужные и нажмите скачать)");
     if(ImGui::Button("Выбрать все")) {
       for(auto& ch: chapters) {
         ch.selected = true;
@@ -499,7 +538,7 @@ void DownloaderWindow::DisplayDownload()
 
 Daedalus::Window* CreateGui()
 {
-  //Daedalus::Logger::InitLogger();
+  // Daedalus::Logger::InitLogger();
   Daedalus::ImGuiLogger::InitLogger();
 
   Daedalus::WindowPropsWin32 props{"Мангалиб загрузчик", Daedalus::WindowStyle::NoStyle, 640, 480};

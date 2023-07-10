@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(MangalibDownloader VERSION 0.0.1)
+project(MangalibDownloader VERSION 0.2.0)
 
 set(CMAKE_CXX_STANDARD 23)
 
@@ -26,7 +26,7 @@ add_compile_definitions(DAEDALUS_PLATFORM_WINDOWS)
 add_compile_definitions(DAEDALUS_STATIC_BUILD)
 add_compile_definitions(_WINSOCKAPI_)
 
-# YOU CAN INSTALL DIRECTX SDK FROM URL :
+# YOU CAN INSTALL DIRECTX SDK FROM  :
 set(DXSDK_DIR "C:/Program files (x86)/Microsoft DirectX SDK (June 2010)")
 set(DAEDALUS_PATH "W:/Daedalus")
 

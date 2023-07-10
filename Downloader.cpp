@@ -1,11 +1,12 @@
 #include "Downloader.h"
+#include "Logger.h"
 #include "httplib.h"
 #include <Utils/Utils.h>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
 
-Downloader::Downloader(Uri url, std::string cookie, int requestDelay, int errorDelay, int maxAttemptCount)
+Downloader::Downloader(Uri url, std::string c, int requestDelay, int errorDelay, int maxAttemptCount)
     : uri(url)
     , branchId(0)
     , maxAttempt(maxAttemptCount)
@@ -13,7 +14,28 @@ Downloader::Downloader(Uri url, std::string cookie, int requestDelay, int errorD
     , requestDelayMs(requestDelay)
     , cli(url.ProtocolHost)
 {
-  cli.set_default_headers({{"Cookie", std::format("mangalib_session={0}", cookie)}});
+
+  DS_INFO("Установленные настройки: кол-во попыток={0}, пауза при ошибке={1}с., пауза между запросами={2}мс.", maxAttempt, errorSleepTime, requestDelayMs);
+
+  cookie = c;
+  cli.set_default_headers({{"Cookie", std::format("mangalib_session={0}", cookie)}, {"Origin", "https://mangalib.me"}, {"Referer", "https://mangalib.me/"}});
+
+  cli.set_connection_timeout(std::chrono::seconds(5));
+  cli.set_read_timeout(std::chrono::seconds(5));
+  cli.set_write_timeout(std::chrono::seconds(5));
+}
+
+std::string ExtractCookie(std::string header, std::string name)
+{
+  if(header.empty() || name.empty()) {
+    return {};
+  }
+  std::string marker = std::format("{0}=", name);
+  int start = header.find(marker);
+  int end = header.find(";");
+  // DS_INFO("HEADER_SIZE : {0}, start : {1}, end: {2}", header.size(), start, end);
+
+  return header.substr(start + marker.size(), end - start - marker.size());
 }
 
 std::wstring ExecutablePath()
@@ -32,13 +54,28 @@ void Downloader::DownloadChapter(Chapter chapter)
   CreateDirectoryWithChecking(path.c_str());
 
   DS_INFO("Цель : Том {0} глава {1}", chapter.volumeNumber, chapter.chapterNumber);
-  auto downloadData = cli.Get(std::format("/download/{0}", chapter.chapterId))->body;
+  auto res = cli.Get(std::format("/download/{0}", chapter.chapterId));
+  xsrfToken = ExtractCookie(res->get_header_value(SET_COOKIE, 0), "XSRF-TOKEN");
+  // DS_INFO("XSRF-TOKEN : {0}", xsrfToken);
 
+  httplib::Headers headers = {
+      {"Accept-Encoding", "gzip, deflate"},
+      {"Cookie", std::format("mangalib_session={0};XSRF-TOKEN={1}", cookie, xsrfToken)},
+      {"Origin", "https://mangalib.me"},
+      {"Referer", "https://mangalib.me/"},
+      {"Sec-Fetch-Dest", "empty"},
+      {"Sec-Fetch-Mode", "cors"},
+      {"Sec-Fetch-Site", "cross-site"}};
+
+  auto downloadData = res->body;
   DS_INFO("Получение ссылок на картинки");
   auto downloadDataJson = nlohmann::json::parse(downloadData);
 
   std::string server = TryGetValue<std::string>(downloadDataJson, DOWNLOAD_SERVER);
   httplib::Client pictureDownloader(server);
+  pictureDownloader.set_connection_timeout(std::chrono::seconds(5));
+  pictureDownloader.set_read_timeout(std::chrono::seconds(5));
+  pictureDownloader.set_write_timeout(std::chrono::seconds(5));
   //DS_DEBUG("Сервер для скачки : {0}", server);
 
   auto images = TryGetValue<nlohmann::json>(downloadDataJson, IMAGES);
@@ -53,25 +90,36 @@ void Downloader::DownloadChapter(Chapter chapter)
     while(attemptCount < maxAttempt) {
       attemptCount++;
 
-      httplib::Result file = pictureDownloader.Get(std::format("{0}/manga{1}/chapters/{2}/{3}", server, uri.Path, chapterId, img.get<std::string>()));
+      httplib::Result file = pictureDownloader.Get(std::format("{0}/manga{1}/chapters/{2}/{3}", server, uri.Path, chapterId, img.get<std::string>()), headers);
 
-      if(file.error() != httplib::Error::Success) {
-        DS_ERROR("Ошибка при загрузке : {0}", httplib::to_string(file.error()));
-        DS_ERROR("Повторная попытка");
-        std::this_thread::sleep_for(std::chrono::seconds(errorSleepTime));
-        continue;
-      }
       if(!file) {
         DS_ERROR("Сервер ничего не вернул");
-        DS_ERROR("Повторная попытка");
+        DS_ERROR("Повторная попытка после паузы в 250мс");
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        continue;
+      }
+      if(file.error() != httplib::Error::Success) {
+        DS_ERROR("Ошибка при загрузке : {0}", httplib::to_string(file.error()));
+        DS_ERROR("Повторная попытка после паузы в {0}с", errorSleepTime);
         std::this_thread::sleep_for(std::chrono::seconds(errorSleepTime));
         continue;
       }
       if(file->status != 200) {
         DS_ERROR("Ошибка {0} | Тело ответа : {1}", file->status, file->body);
-        DS_ERROR("Повторная попытка");
+        DS_ERROR("Повторная попытка после паузы в {0}с", errorSleepTime);
         std::this_thread::sleep_for(std::chrono::seconds(errorSleepTime));
         continue;
+      }
+      antiDDOSToken = ExtractCookie(file->get_header_value(SET_COOKIE, 0), "__ddg1_");
+      if(!antiDDOSToken.empty()) {// New token
+        headers = {
+            {"Accept-Encoding", "gzip, deflate"},
+            {"Cookie", std::format("mangalib_session={0};XSRF-TOKEN={1};__ddg1_={2}", cookie, xsrfToken, antiDDOSToken)},
+            {"Origin", "https://mangalib.me"},
+            {"Referer", "https://mangalib.me/"},
+            {"Sec-Fetch-Dest", "empty"},
+            {"Sec-Fetch-Mode", "cors"},
+            {"Sec-Fetch-Site", "cross-site"}};
       }
 
       std::wostringstream ss;
