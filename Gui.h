@@ -54,7 +54,7 @@ private:
   }
 
 private:
-  const std::string VERSION = "0.2.0";
+  const std::string VERSION = "0.2.1";
 
   char search[512]{};
   char currentName[512]{};
@@ -70,6 +70,8 @@ private:
   int repeatCount = 3;
   int errorDelay = 0;
   int requestDelay = 0;
+  int skipCountStart = 0;
+  int skipCountEnd = 0;
 
   // Worker threads for async
   std::vector<std::future<void>> futures;

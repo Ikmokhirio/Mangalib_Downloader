@@ -6,12 +6,14 @@
 #include <sstream>
 #include <stdexcept>
 
-Downloader::Downloader(Uri url, std::string c, int requestDelay, int errorDelay, int maxAttemptCount)
+Downloader::Downloader(Uri url, std::string c, int requestDelay, int errorDelay, int maxAttemptCount, int skipStart, int skipEnd)
     : uri(url)
     , branchId(0)
     , maxAttempt(maxAttemptCount)
     , errorSleepTime(errorDelay)
     , requestDelayMs(requestDelay)
+    , skipCountStart(skipStart)
+    , skipCountEnd(skipEnd)
     , cli(url.ProtocolHost)
 {
 
@@ -85,6 +87,18 @@ void Downloader::DownloadChapter(Chapter chapter)
 
   int listNumber = 1;
   for(auto& img: images) {
+
+    // Skip last pages
+    if(images.size() - (listNumber - 1) <= skipCountEnd) {
+      listNumber++;
+      continue;
+    }
+    //Skip first pages
+    if(listNumber - 1 < skipCountStart) {
+      listNumber++;
+      continue;
+    }
+
     attemptCount = 0;
 
     while(attemptCount < maxAttempt) {

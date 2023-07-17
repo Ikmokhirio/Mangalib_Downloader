@@ -43,6 +43,8 @@ DownloaderWindow::DownloaderWindow(Daedalus::WindowPropsWin32 props)
   requestDelay = 0;
   errorDelay = 60;
   repeatCount = 5;
+  skipCountStart = 0;
+  skipCountEnd = 0;
 }
 
 DownloaderWindow::~DownloaderWindow()
@@ -266,7 +268,7 @@ void DownloaderWindow::GetTranslations()
 
   auto url = Uri::Parse(currentManga.link);
 
-  downloader = std::make_unique<Downloader>(url, cookie, requestDelay, errorDelay, repeatCount);
+  downloader = std::make_unique<Downloader>(url, cookie, requestDelay, errorDelay, repeatCount, skipCountStart, skipCountEnd);
 
   try {
     downloader->ExtractJsonData();
@@ -432,6 +434,16 @@ void DownloaderWindow::DisplayDownloadSettings()
   ImGui::PushItemWidth(48);
   ImGui::DragInt("Количество попыток на картинку", &repeatCount, 1.0f, 1, 100);
 
+  ImGui::TableNextRow();
+
+  ImGui::TableNextColumn();
+  ImGui::PushItemWidth(48);
+  ImGui::DragInt("Пропустить первые страницы", &skipCountStart, 1.0f, 0, 10);
+
+  ImGui::TableNextColumn();
+  ImGui::PushItemWidth(48);
+  ImGui::DragInt("Пропустить последние страницы", &skipCountEnd, 1.0f, 0, 10);
+
   ImGui::EndTable();
 }
 
@@ -467,6 +479,8 @@ void DownloaderWindow::DisplayTranslationList()
       downloader->SetErrorDelay(errorDelay);
       downloader->SetMaxAttempts(repeatCount);
       downloader->SetRequestDelay(requestDelay);
+      downloader->SetSkipCountStart(skipCountStart);
+      downloader->SetSkipCountEnd(skipCountEnd);
       GetChapters();
     }
     return;
@@ -497,7 +511,10 @@ void DownloaderWindow::DisplayDownload()
 
 Во втором случае я предлагаю поставить 5 попыток и "паузу после ошибки" - 60 секунд, то есть минуту. 
 Тогда время скачивания будет долгим, но больше вероятность, что все главы скачаются за один запуск
-Для второго случая предназначены настройки по-умолчанию)");
+Для второго случая предназначены настройки по-умолчанию
+
+Опции "пропустить последние страницы" и "пропустить первые страницы" нужны для автоматического вырезания
+страниц, которые добавляют переводчики)");
 
   ImGui::Separator();
 
@@ -525,6 +542,11 @@ void DownloaderWindow::DisplayDownload()
     ImGui::SameLine();
 
     if(ImGui::Button("Скачать")) {
+      downloader->SetErrorDelay(errorDelay);
+      downloader->SetMaxAttempts(repeatCount);
+      downloader->SetRequestDelay(requestDelay);
+      downloader->SetSkipCountStart(skipCountStart);
+      downloader->SetSkipCountEnd(skipCountEnd);
       ImGui::OpenPopup("#FOLDER_SELECT");
     }
   }

@@ -94,6 +94,8 @@ private:
   int maxAttempt;
   int errorSleepTime;
   int requestDelayMs;
+  int skipCountStart;
+  int skipCountEnd;
 
   httplib::Client cli;
 
@@ -115,7 +117,7 @@ private:
   Manga currentManga;
 
 public:
-  Downloader(Uri url, std::string cookie, int requestDelay = 0, int errorDelay = 0, int maxAttemptCount = 3);
+  Downloader(Uri url, std::string cookie, int requestDelay = 0, int errorDelay = 0, int maxAttemptCount = 3, int skipCountStart = 0, int skipCountEnd = 0);
 
   std::vector<Team> GetTeams();
 
@@ -136,6 +138,9 @@ public:
   inline void SetMaxAttempts(int attempts) { maxAttempt = attempts; }
 
   inline void SetErrorDelay(int seconds) { errorSleepTime = seconds; }
+
+  inline void SetSkipCountStart(int skip) { skipCountStart = skip; }
+  inline void SetSkipCountEnd(int skip) { skipCountEnd = skip; }
 
   inline void SetRequestDelay(int milliseconds) { requestDelayMs = milliseconds; }
 };
