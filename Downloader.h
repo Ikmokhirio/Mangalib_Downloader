@@ -26,8 +26,8 @@
 
 struct Chapter {
   std::string chapterId;
-  int volumeNumber;
-  int chapterNumber;
+  std::string volumeNumber;
+  std::string chapterNumber;
   int branchNumber;
 
   bool selected;
@@ -35,7 +35,7 @@ struct Chapter {
   bool loading;
   bool errorOnLastOperation;
 
-  Chapter(const std::string& id, const int& v, const int& n, const int branch = 0)
+  Chapter(const std::string& id, const std::string& v, const std::string& n, const int branch = 0)
   {
     chapterId = id;
     volumeNumber = v;
@@ -123,7 +123,7 @@ public:
 
   std::vector<Chapter> GetChapters();
 
-  void DownloadChapter(Chapter chapter);
+  void DownloadChapter(std::string prevV, std::string prevC, Chapter chapter, std::string nextV, std::string nextC);
 
   void ExtractJsonData();
 

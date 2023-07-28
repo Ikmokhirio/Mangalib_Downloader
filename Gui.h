@@ -54,7 +54,7 @@ private:
   }
 
 private:
-  const std::string VERSION = "0.2.1";
+  const std::string VERSION = "0.2.2";
 
   char search[512]{};
   char currentName[512]{};

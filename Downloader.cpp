@@ -48,7 +48,7 @@ std::wstring ExecutablePath()
   return std::wstring(buffer).substr(0, pos);
 }
 
-void Downloader::DownloadChapter(Chapter chapter)
+void Downloader::DownloadChapter(std::string prevV, std::string prevC, Chapter chapter, std::string nextV, std::string nextC)
 {
   std::wstring path = ExecutablePath();
   path.append(L"\\");
@@ -139,7 +139,7 @@ void Downloader::DownloadChapter(Chapter chapter)
       std::wostringstream ss;
       //ss << "./" << mangaName << "/" << Converter::ToWString(img.get<std::string>());
       std::filesystem::path downloadFile = img.get<std::string>();
-      ss << "./" << Converter::ToWString(currentManga.mangaName) << "/vol" << chapter.volumeNumber << "_ch" << chapter.chapterNumber << "_p" << listNumber << Converter::ToWString(downloadFile.extension().string());
+      ss << "./" << Converter::ToWString(currentManga.mangaName) << "/vol" << Converter::ToWString(chapter.volumeNumber) << "_ch" << Converter::ToWString(chapter.chapterNumber) << "_p" << listNumber << Converter::ToWString(downloadFile.extension().string());
       //DS_INFO("{0}", Converter::ToString(ss.str()));
       for(auto combiner: combiners) {
         combiner->AddFile(file->body, ss.str());
@@ -154,10 +154,11 @@ void Downloader::DownloadChapter(Chapter chapter)
 
   std::wostringstream ss;
   std::wstring outputPath;
-  ss << "./" << Converter::ToWString(currentManga.mangaName) << "/vol_" << chapter.volumeNumber << "_ch_" << chapter.chapterNumber;
+  ss << "./" << Converter::ToWString(currentManga.mangaName) << "/vol_" << Converter::ToWString(chapter.volumeNumber) << "_ch_" << Converter::ToWString(chapter.chapterNumber);
   //std::string outputPath = std::format("./{0}/vol_{1}_ch_{2}", mangaName, chapter.volumeNumber, chapter.chapterNumber);
-  std::string previousChapter = std::format("vol_{0}_ch_{1}", chapter.volumeNumber, chapter.chapterNumber - 1);
-  std::string nextChapter = std::format("vol_{0}_ch_{1}", chapter.volumeNumber, chapter.chapterNumber + 1);
+
+  std::string previousChapter = std::format("vol_{0}_ch_{1}", prevV, prevC);
+  std::string nextChapter = std::format("vol_{0}_ch_{1}", nextV, nextC);
 
   for(auto combiner: combiners) {
     combiner->SaveTo(ss.str(), previousChapter, nextChapter);
@@ -266,9 +267,15 @@ void Downloader::ExtractChaptersList()
 
 void Downloader::ProcessCurrentChapter()
 {
-  int volumeNumber = TryGetValue<int>(currentChapter, VOLUME);
-  int chapterNumber = std::stoi(TryGetValue<std::string>(currentChapter, CHAPTER_NUMBER));
-  std::string chapterId = std::to_string(TryGetValue<int>(currentChapter, CHAPTER_ID));
+  std::string volumeNumber, chapterNumber, chapterId;
+  try {
+    volumeNumber = std::to_string(TryGetValue<int>(currentChapter, VOLUME));
+    chapterNumber = TryGetValue<std::string>(currentChapter, CHAPTER_NUMBER);// Can be XX.YY
+    chapterId = std::to_string(TryGetValue<int>(currentChapter, CHAPTER_ID));
+  } catch(std::exception& e) {
+    DS_ERROR("{0}", e.what());
+    return;
+  }
   if(branchId != 0) {
     try {
       int currentBranch = TryGetValue<int>(currentChapter, BRANCH_ID);
@@ -276,11 +283,13 @@ void Downloader::ProcessCurrentChapter()
         return;
       }
     } catch(MangalibDownloaderError& e) {
-      DS_INFO(e.what());
+      DS_ERROR("{0}", e.what());
+      return;
+    } catch(std::exception& e) {
+      DS_ERROR("{0}", e.what());
       return;
     }
   }
-
   chapters.emplace_back(Chapter(chapterId, volumeNumber, chapterNumber, branchId));
 }
 

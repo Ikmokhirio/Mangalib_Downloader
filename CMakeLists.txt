@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(MangalibDownloader VERSION 0.2.1)
+project(MangalibDownloader VERSION 0.2.2)
 
 set(CMAKE_CXX_STANDARD 23)
 

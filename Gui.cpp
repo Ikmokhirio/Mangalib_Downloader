@@ -369,7 +369,20 @@ void DownloaderWindow::DownloadChapters()
       ch.finished = false;
       ch.loading = false;
     }
-    for(auto& ch: chapters) {
+    std::string prevVolume;
+    std::string prevChapter;
+    std::string nextVolume;
+    std::string nextChapter;
+    for(int i = 0; i < chapters.size(); i++) {
+      auto& ch = chapters[i];
+      if(i > 0) {
+        prevVolume = chapters[i - 1].volumeNumber;
+        prevChapter = chapters[i - 1].chapterNumber;
+      }
+      if(i < chapters.size() - 1) {
+        nextVolume = chapters[i + 1].volumeNumber;
+        nextChapter = chapters[i + 1].chapterNumber;
+      }
       if(ch.selected) {
         ch.loading = true;
         selected++;
@@ -377,7 +390,7 @@ void DownloaderWindow::DownloadChapters()
           return;
         }
         try {
-          downloader->DownloadChapter(ch);
+          downloader->DownloadChapter(prevVolume, prevChapter, ch, nextVolume, nextChapter);
           ch.errorOnLastOperation = false;
           ch.finished = true;
           finished++;
